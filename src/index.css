@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@layer utilities {
+  @media print {
+    /* Hide non-printable elements */
+    .no-print,
+    .print\\:hidden,
+    header,
+    nav,
+    aside,
+    button:not(.allow-print) {
+      display: none !important;
+    }
+
+    body {
+      background-color: #ffffff !important;
+      color: #000000 !important;
+      font-size: 11pt !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .print-container {
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+
+    .page-break {
+      page-break-after: always !important;
+      break-after: page !important;
+    }
+
+    .avoid-break {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    /* 5 Receipts Per Page Layout */
+    .a4-voucher-page {
+      height: 280mm !important;
+      max-height: 285mm !important;
+      page-break-after: always !important;
+      break-after: page !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      box-sizing: border-box !important;
+      padding: 3mm 0 !important;
+    }
+
+    .voucher-card {
+      height: 19.4% !important;
+      max-height: 19.6% !important;
+      margin-bottom: 2mm !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      border-color: #000000 !important;
+    }
+
+    /* Envelope Print */
+    .envelope-card {
+      page-break-after: always !important;
+      break-after: page !important;
+      width: 100% !important;
+      height: 100vh !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+  }
+}
+

@@ -1,0 +1,19 @@
+# حماية أمنية لنظام الرواتب على استضافة Hostinger المشتركة
+# Apache 2.4+ / LiteSpeed
+
+# منع تصفح المجلدات مباشرة
+Options -Indexes
+
+# منع الوصول للملفات الحساسة
+<FilesMatch "^(install\.lock|schema\.sql|\.env|\.git)">
+    Require all denied
+</FilesMatch>
+
+# حماية مجلد config
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^config/ - [F,L]
+</IfModule>
+
+# ضبط الترميز الافتراضي للـ UTF-8
+AddDefaultCharset UTF-8

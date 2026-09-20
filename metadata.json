@@ -1,0 +1,6 @@
+{
+  "name": "نظام رواتب متعدد الفروع (PHP + MySQL)",
+  "description": "نظام رواتب وإدارة فروع متكامل بلغة PHP 8.2 و MySQL مع سكربت تنصيب، حماية، وتسجيل دخول آمن بالدينار الكويتي.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
