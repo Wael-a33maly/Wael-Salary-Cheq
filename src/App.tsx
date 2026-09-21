@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppHeader } from './components/AppHeader';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
@@ -12,6 +12,7 @@ import { SettingsView } from './components/SettingsView';
 import { HostingerGuideModal } from './components/HostingerGuideModal';
 import { LoginView } from './components/LoginView';
 import { ChequePrintingModule } from './components/cheques/ChequePrintingModule';
+import { INITIAL_ISSUED_CHEQUES } from './mockCheques';
 import { 
   INITIAL_SETTINGS, 
   INITIAL_BRANCHES, 
@@ -34,6 +35,7 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [chequeSubTab, setChequeSubTab] = useState<string>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [activeReportId, setActiveReportId] = useState<number>(1);
@@ -238,6 +240,24 @@ export default function App() {
     return st.category === 'expired' || st.category === 'under_30' || st.category === 'under_alert';
   }).length;
 
+  // Cheque due date alerts based on settings.chequeDueDateAlertDays (default 7 days)
+  const chequeDueDateAlertDays = settings.chequeDueDateAlertDays ?? 7;
+  const upcomingCheques = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('app_issued_cheques');
+      const cheques = stored ? JSON.parse(stored) : INITIAL_ISSUED_CHEQUES;
+      const today = new Date('2026-09-21');
+      return cheques.filter((c: any) => {
+        if (c.status !== 'issued') return false;
+        const due = new Date(c.dueDate);
+        const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDays >= -2 && diffDays <= chequeDueDateAlertDays;
+      });
+    } catch (e) {
+      return [];
+    }
+  }, [settings.chequeDueDateAlertDays]);
+
   // If user is logged out, render the official Login page
   if (!currentUser) {
     return (
@@ -271,6 +291,11 @@ export default function App() {
         residencyAlertCount={residencyAlertCount}
         activeReportId={activeReportId}
         onSelectReportId={(id) => setActiveReportId(id)}
+        activeChequeSubTab={chequeSubTab}
+        onSelectChequeSubTab={(sub) => {
+          setActiveTab('cheques');
+          setChequeSubTab(sub);
+        }}
         onLogout={() => {
           addAuditLog('LOGOUT', 'users', `تسجيل خروج للمستخدم: ${currentUser.username}`);
           setCurrentUser(null);
@@ -287,12 +312,17 @@ export default function App() {
           companyName={settings.companyName}
           currentUser={currentUser}
           residencyAlertCount={residencyAlertCount}
+          upcomingCheques={upcomingCheques}
           onLogout={() => {
             addAuditLog('LOGOUT', 'users', `تسجيل خروج للمستخدم: ${currentUser.username}`);
             setCurrentUser(null);
           }}
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           onSelectReportId={(id) => setActiveReportId(id)}
+          onNavigateToCheques={(sub) => {
+            setActiveTab('cheques');
+            if (sub) setChequeSubTab(sub);
+          }}
         />
 
         {/* Dynamic Main Workspace View */}
@@ -308,7 +338,11 @@ export default function App() {
           )}
 
           {activeTab === 'cheques' && (
-            <ChequePrintingModule />
+            <ChequePrintingModule
+              activeSubTab={chequeSubTab}
+              onSubTabChange={(sub) => setChequeSubTab(sub)}
+              companyName={settings.companyName}
+            />
           )}
 
           {activeTab === 'employees' && (
@@ -400,21 +434,11 @@ export default function App() {
         </main>
 
         {/* App Footer */}
-        <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 print:hidden">
-          <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <div>
-              <span>{settings.companyName} &bull; نظام إدارة الرواتب والفروع (دولة الكويت)</span>
-            </div>
-            <div className="flex items-center gap-3 text-[11px]">
-              <button
-                onClick={() => setIsGuideOpen(true)}
-                className="text-blue-600 hover:underline font-bold"
-              >
-                دليل الرفع والتنصيب (Hostinger)
-              </button>
-              <span className="text-slate-300">|</span>
-              <span className="font-mono">PHP 8.2 &bull; MySQL &bull; 0.050 KWD Floor</span>
-            </div>
+        <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-600 print:hidden">
+          <div className="max-w-7xl mx-auto px-4 flex items-center justify-center">
+            <span className="font-sans font-bold">
+              &copy; 2025 A33maly - جميع الحقوق محفوظة
+            </span>
           </div>
         </footer>
 

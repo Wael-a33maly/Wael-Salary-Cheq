@@ -5,8 +5,12 @@ import {
   Menu,
   Calculator,
   Printer,
-  FileText
+  FileText,
+  Landmark,
+  Calendar,
+  ArrowUpRight
 } from 'lucide-react';
+import { IssuedCheque } from '../types';
 
 interface AppHeaderProps {
   activeTab: string;
@@ -14,9 +18,11 @@ interface AppHeaderProps {
   companyName: string;
   currentUser: { fullName: string; username: string; role: string } | null;
   residencyAlertCount: number;
+  upcomingCheques?: IssuedCheque[];
   onLogout: () => void;
   onToggleSidebar?: () => void;
   onSelectReportId?: (id: number) => void;
+  onNavigateToCheques?: (subTab?: string) => void;
 }
 
 export function AppHeader({
@@ -25,11 +31,16 @@ export function AppHeader({
   companyName,
   currentUser,
   residencyAlertCount,
+  upcomingCheques = [],
   onLogout,
   onToggleSidebar,
   onSelectReportId,
+  onNavigateToCheques,
 }: AppHeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationTab, setNotificationTab] = useState<'cheques' | 'residency'>('cheques');
+
+  const totalAlertCount = residencyAlertCount + upcomingCheques.length;
 
   const getTabLabel = (tab: string) => {
     switch (tab) {
@@ -81,17 +92,41 @@ export function AppHeader({
           {/* Left: Quick Actions & Notifications */}
           <div className="flex items-center gap-2.5">
             
-            {/* Quick action buttons */}
+            {/* Quick action: مسير الرواتب (مخفي تماماً عند فتح تبويب الشيكات بناءً على طلب المستخدم) */}
+            {activeTab !== 'cheques' && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('payroll')}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+                title="مسير الرواتب"
+              >
+                <Calculator className="w-3.5 h-3.5 text-blue-400" />
+                <span>مسير الرواتب</span>
+              </button>
+            )}
+
+            {/* Quick action: الشيكات المصرفية (ظاهر في لوحة التحكم وباقي التبويبات) */}
             <button
-              onClick={() => setActiveTab('payroll')}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
-              title="مسير الرواتب"
+              type="button"
+              onClick={() => {
+                setActiveTab('cheques');
+                if (onNavigateToCheques) {
+                  onNavigateToCheques('dashboard');
+                }
+              }}
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                activeTab === 'cheques'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
+              }`}
+              title="طباعة وإدارة الشيكات المصرفية"
             >
-              <Calculator className="w-3.5 h-3.5 text-blue-400" />
-              <span>مسير الرواتب</span>
+              <Landmark className="w-3.5 h-3.5 text-amber-400" />
+              <span>الشيكات المصرفية</span>
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('receipts')}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
               title="طباعة إيصالات الصرف والأظرف"
@@ -100,95 +135,186 @@ export function AppHeader({
               <span>طباعة الإيصالات والأظرف</span>
             </button>
 
-            {/* Residency Expiration Alerts Bell */}
+            {/* Unified Alerts Bell: Residency + Upcoming Cheques */}
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setShowNotifications(!showNotifications)}
                 className={`p-2 rounded-lg relative transition ${
-                  residencyAlertCount > 0
+                  totalAlertCount > 0
                     ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40'
                     : 'bg-slate-800 text-slate-400 hover:text-white'
                 }`}
-                title="تنبيهات الإقامات"
+                title="تنبيهات النظام (الشيكات المستحقة والإقامات)"
               >
                 <Bell className="w-4 h-4" />
-                {residencyAlertCount > 0 && (
+                {totalAlertCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
-                    {residencyAlertCount}
+                    {totalAlertCount}
                   </span>
                 )}
               </button>
 
               {showNotifications && (
-                <div className="absolute left-0 mt-2 w-80 bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 p-3 z-50 animate-in fade-in">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                      تنبيهات انتهاء الإقامات ({residencyAlertCount})
-                    </span>
+                <div className="absolute left-0 mt-2 w-88 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-3 z-50 animate-in fade-in">
+                  
+                  {/* Notification Category Tabs */}
+                  <div className="flex border-b border-slate-100 pb-2 mb-2 gap-1">
                     <button
-                      onClick={() => {
-                        setShowNotifications(false);
-                        if (onSelectReportId) {
-                          onSelectReportId(6);
-                        }
-                        setActiveTab('reports');
-                      }}
-                      className="text-[11px] text-blue-600 hover:underline font-bold"
+                      type="button"
+                      onClick={() => setNotificationTab('cheques')}
+                      className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
+                        notificationTab === 'cheques'
+                          ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                          : 'text-slate-500 hover:bg-slate-50'
+                      }`}
                     >
-                      عرض تقرير الإقامات
+                      <Landmark className="w-3.5 h-3.5 text-amber-600" />
+                      <span>شيكات مستحقة ({upcomingCheques.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNotificationTab('residency')}
+                      className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
+                        notificationTab === 'residency'
+                          ? 'bg-rose-50 text-rose-900 border border-rose-200'
+                          : 'text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                      <span>الإقامات ({residencyAlertCount})</span>
                     </button>
                   </div>
-                  <div className="py-2 text-xs space-y-1.5 max-h-56 overflow-y-auto">
-                    <div 
-                      onClick={() => {
-                        setShowNotifications(false);
-                        if (onSelectReportId) {
-                          onSelectReportId(6);
-                        }
-                        setActiveTab('reports');
-                      }}
-                      className="p-2 bg-red-50 hover:bg-red-100/80 rounded-lg text-red-900 border border-red-200 cursor-pointer transition"
-                    >
-                      <div className="font-bold flex items-center justify-between">
-                        <span>خالد عبد الرحمن المنصور (الإدارة)</span>
-                        <span className="text-[10px] text-red-600 underline">عرض</span>
+
+                  {/* Cheques Due Alerts Tab Content */}
+                  {notificationTab === 'cheques' && (
+                    <div>
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
+                        <span className="font-bold text-slate-700">شيكات اقترب موعد صرفها:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowNotifications(false);
+                            setActiveTab('cheques');
+                            if (onNavigateToCheques) {
+                              onNavigateToCheques('ledger');
+                            }
+                          }}
+                          className="text-[11px] text-blue-600 hover:underline font-bold flex items-center gap-0.5"
+                        >
+                          <span>سجل الشيكات</span>
+                          <ArrowUpRight className="w-3 h-3" />
+                        </button>
                       </div>
-                      <div className="text-[11px] text-red-700">الإقامة منتهية منذ 10 أيام (تتطلب تجديداً فورياً)</div>
-                    </div>
-                    <div 
-                      onClick={() => {
-                        setShowNotifications(false);
-                        if (onSelectReportId) {
-                          onSelectReportId(6);
-                        }
-                        setActiveTab('reports');
-                      }}
-                      className="p-2 bg-red-50 hover:bg-red-100/80 rounded-lg text-red-900 border border-red-200 cursor-pointer transition"
-                    >
-                      <div className="font-bold flex items-center justify-between">
-                        <span>فهد عادل الشمري (فرع الأحمدي)</span>
-                        <span className="text-[10px] text-red-600 underline">عرض</span>
+
+                      <div className="py-2 space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                        {upcomingCheques.length === 0 ? (
+                          <div className="text-center py-4 text-xs text-slate-400">
+                            لا توجد شيكات مستحقة الصرف خلال هذه الفترة.
+                          </div>
+                        ) : (
+                          upcomingCheques.map((chk) => (
+                            <div
+                              key={chk.id}
+                              onClick={() => {
+                                setShowNotifications(false);
+                                setActiveTab('cheques');
+                                if (onNavigateToCheques) {
+                                  onNavigateToCheques('ledger');
+                                }
+                              }}
+                              className="p-2.5 bg-amber-50/70 hover:bg-amber-100/80 rounded-xl text-amber-950 border border-amber-200 cursor-pointer transition"
+                            >
+                              <div className="flex items-center justify-between font-bold text-xs">
+                                <span className="truncate max-w-[170px]">{chk.beneficiaryName}</span>
+                                <span className="font-mono text-amber-800 font-black">{chk.amount.toFixed(3)} د.ك</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] text-amber-700 mt-1 font-mono">
+                                <span>شيك #{chk.chequeNumberStr}</span>
+                                <span>استحقاق: {chk.dueDate}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
-                      <div className="text-[11px] text-red-700">الإقامة منتهية منذ 19 يوماً</div>
                     </div>
-                    <div 
-                      onClick={() => {
-                        setShowNotifications(false);
-                        if (onSelectReportId) {
-                          onSelectReportId(6);
-                        }
-                        setActiveTab('reports');
-                      }}
-                      className="p-2 bg-orange-50 hover:bg-orange-100/80 rounded-lg text-orange-900 border border-orange-200 cursor-pointer transition"
-                    >
-                      <div className="font-bold flex items-center justify-between">
-                        <span>سامي عبد الله الحداد (فرع حولي)</span>
-                        <span className="text-[10px] text-orange-600 underline">عرض</span>
+                  )}
+
+                  {/* Residency Alerts Tab Content */}
+                  {notificationTab === 'residency' && (
+                    <div>
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
+                        <span className="font-bold text-slate-700">إقامات قاربت على الانتهاء:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowNotifications(false);
+                            if (onSelectReportId) {
+                              onSelectReportId(6);
+                            }
+                            setActiveTab('reports');
+                          }}
+                          className="text-[11px] text-blue-600 hover:underline font-bold"
+                        >
+                          عرض التقرير الكامل
+                        </button>
                       </div>
-                      <div className="text-[11px] text-orange-700">تنتهي خلال 8 أيام (2026-09-28)</div>
+
+                      <div className="py-2 text-xs space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                        <div 
+                          onClick={() => {
+                            setShowNotifications(false);
+                            if (onSelectReportId) {
+                              onSelectReportId(6);
+                            }
+                            setActiveTab('reports');
+                          }}
+                          className="p-2 bg-red-50 hover:bg-red-100/80 rounded-xl text-red-900 border border-red-200 cursor-pointer transition"
+                        >
+                          <div className="font-bold flex items-center justify-between">
+                            <span>خالد عبد الرحمن المنصور (الإدارة)</span>
+                            <span className="text-[10px] text-red-600 underline">عرض</span>
+                          </div>
+                          <div className="text-[11px] text-red-700">الإقامة منتهية منذ 10 أيام (تتطلب تجديداً فورياً)</div>
+                        </div>
+
+                        <div 
+                          onClick={() => {
+                            setShowNotifications(false);
+                            if (onSelectReportId) {
+                              onSelectReportId(6);
+                            }
+                            setActiveTab('reports');
+                          }}
+                          className="p-2 bg-red-50 hover:bg-red-100/80 rounded-xl text-red-900 border border-red-200 cursor-pointer transition"
+                        >
+                          <div className="font-bold flex items-center justify-between">
+                            <span>فهد عادل الشمري (فرع الأحمدي)</span>
+                            <span className="text-[10px] text-red-600 underline">عرض</span>
+                          </div>
+                          <div className="text-[11px] text-red-700">الإقامة منتهية منذ 19 يوماً</div>
+                        </div>
+
+                        <div 
+                          onClick={() => {
+                            setShowNotifications(false);
+                            if (onSelectReportId) {
+                              onSelectReportId(6);
+                            }
+                            setActiveTab('reports');
+                          }}
+                          className="p-2 bg-orange-50 hover:bg-orange-100/80 rounded-xl text-orange-900 border border-orange-200 cursor-pointer transition"
+                        >
+                          <div className="font-bold flex items-center justify-between">
+                            <span>سامي عبد الله الحداد (فرع حولي)</span>
+                            <span className="text-[10px] text-orange-600 underline">عرض</span>
+                          </div>
+                          <div className="text-[11px] text-orange-700">تنتهي خلال 8 أيام (2026-09-28)</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
                 </div>
               )}
             </div>

@@ -86,6 +86,8 @@ export interface CompanySettings {
   logoUrl?: string;
   overtimeRate: number;
   residenceAlertDays: number;
+  chequeDueDateAlertDays?: number; // أيام تنبيه استحقاق الشيكات
+  defaultChequePrinter?: string; // اسم طابعة الشيكات الافتراضية
   currency: string;
   roundingStep: number;
   // Printing settings
@@ -95,11 +97,31 @@ export interface CompanySettings {
 }
 
 export interface ChequePrintSettings {
-  offsetX: number; // إزاحة أفقية بالملليمتر
-  offsetY: number; // إزاحة رأسية بالملليمتر
+  offsetX: number; // إزاحة أفقية عامة بالملليمتر
+  offsetY: number; // إزاحة رأسية عامة بالملليمتر
   showBackgroundOnPrint: boolean; // طباعة تصميم الشيك بالكامل أم طباعة النصوص فقط على شيك ورقي فعلي
   defaultCrossing: boolean; // تسطير افتراضي (للمستفيد الأول فقط)
   defaultBearerCrossing: boolean; // شطب عبارة "أو لحامله"
+  defaultPrinterName?: string; // اسم طابعة الشيكات الافتراضية
+  chequeDueDateAlertDays?: number; // عدد الأيام لتنبيه استحقاق الشيك
+  templateMode?: 'scanned_image' | 'vector_template' | 'blank' | 'none'; // قالب المعاينة: صورة ممسوحة، تصميم متجهي، أو بدون خلفية
+  // ضبط كل حقل منفرداً (أعلى/أسفل Y، يمين/يسار X بالملليمتر)
+  dateOffsetX?: number;
+  dateOffsetY?: number;
+  payeeOffsetX?: number;
+  payeeOffsetY?: number;
+  wordsOffsetX?: number;
+  wordsOffsetY?: number;
+  amountOffsetX?: number;
+  amountOffsetY?: number;
+}
+
+export interface BeneficiaryCategory {
+  id: string;
+  name: string;
+  color?: string;
+  description?: string;
+  isDefault?: boolean;
 }
 
 export interface BankAccount {
@@ -137,7 +159,7 @@ export interface Beneficiary {
   nameAr: string; // الاسم بالعربية (كما سيطبع على الشيك)
   nameEn?: string; // Beneficiary English Name
   bankAccountId?: string | 'all'; // مرتبط بحساب بنكي معين أو عام لكافة الحسابات
-  category: 'company' | 'vendor' | 'employee' | 'government' | 'individual';
+  category: 'company' | 'vendor' | 'employee' | 'government' | 'individual' | string;
   civilIdOrCR?: string; // الرقم المدني أو السجل التجاري
   bankName?: string;
   iban?: string;
@@ -157,6 +179,8 @@ export interface IssuedCheque {
   beneficiaryName: string; // الاسم المطبوع على الشيك
   amount: number; // بالدينار الكويتي مثلاً 1450.750
   amountInWordsAr: string; // تفقيط المبلغ بالحروف العربية
+  amountInWordsEn?: string; // تفقيط المبلغ بالإنجليزية
+  tafqeetLang?: 'ar' | 'en'; // لغة التفقيط المختارة (عربي أو إنجليزي)
   issueDate: string; // YYYY-MM-DD
   dueDate: string; // YYYY-MM-DD (تاريخ الشيك / الاستحقاق)
   status: 'issued' | 'cashed' | 'cancelled'; // صادر (لم يصرف بعد / معلق) | منصرف | ملغى

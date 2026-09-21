@@ -200,3 +200,82 @@ export function tafqeetKwd(amount: number): string {
 
   return `فقط ${result} لا غير`;
 }
+
+const EN_ONES = [
+  '',
+  'One',
+  'Two',
+  'Three',
+  'Four',
+  'Five',
+  'Six',
+  'Seven',
+  'Eight',
+  'Nine',
+  'Ten',
+  'Eleven',
+  'Twelve',
+  'Thirteen',
+  'Fourteen',
+  'Fifteen',
+  'Sixteen',
+  'Seventeen',
+  'Eighteen',
+  'Nineteen',
+];
+
+const EN_TENS = [
+  '',
+  '',
+  'Twenty',
+  'Thirty',
+  'Forty',
+  'Fifty',
+  'Sixty',
+  'Seventy',
+  'Eighty',
+  'Ninety',
+];
+
+function integerToEnWords(num: number): string {
+  if (num === 0) return 'Zero';
+  if (num < 20) return EN_ONES[num];
+  if (num < 100) {
+    const rem = num % 10;
+    return EN_TENS[Math.floor(num / 10)] + (rem !== 0 ? ' ' + EN_ONES[rem] : '');
+  }
+  if (num < 1000) {
+    const rem = num % 100;
+    return EN_ONES[Math.floor(num / 100)] + ' Hundred' + (rem !== 0 ? ' ' + integerToEnWords(rem) : '');
+  }
+  if (num < 1000000) {
+    const rem = num % 1000;
+    return integerToEnWords(Math.floor(num / 1000)) + ' Thousand' + (rem !== 0 ? ' ' + integerToEnWords(rem) : '');
+  }
+  if (num < 1000000000) {
+    const rem = num % 1000000;
+    return integerToEnWords(Math.floor(num / 1000000)) + ' Million' + (rem !== 0 ? ' ' + integerToEnWords(rem) : '');
+  }
+  return num.toString();
+}
+
+/**
+ * تفقيط المبالغ باللغة الإنجليزية للشيكات المصرفية الكويتية
+ * Example: 2500 -> "Kuwaiti Dinars Two Thousand Five Hundred Only"
+ */
+export function tafqeetKwdEn(amount: number): string {
+  if (isNaN(amount) || amount <= 0) {
+    return 'Kuwaiti Dinars Zero Only';
+  }
+
+  const totalFils = Math.round(amount * 1000);
+  const dinars = Math.floor(totalFils / 1000);
+  const fils = totalFils % 1000;
+
+  let words = 'Kuwaiti Dinar' + (dinars !== 1 ? 's ' : ' ') + integerToEnWords(dinars);
+  if (fils > 0) {
+    words += ' and ' + integerToEnWords(fils) + ' Fils';
+  }
+  return words + ' Only';
+}
+

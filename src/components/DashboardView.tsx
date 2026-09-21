@@ -11,7 +11,8 @@ import {
   ShieldCheck, 
   FileText,
   Clock,
-  Sparkles
+  Sparkles,
+  Landmark
 } from 'lucide-react';
 import { Branch, Employee, AuditRecord, CompanySettings } from '../types';
 import { getResidenceStatus } from '../mockData';
@@ -64,7 +65,7 @@ export function DashboardView({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           <button
             onClick={() => onNavigate('payroll')}
             className="flex items-center gap-2.5 p-3 rounded-xl bg-blue-50/70 hover:bg-blue-100/70 text-blue-900 font-bold text-xs transition border border-blue-200 shadow-2xs text-right active:scale-95"
@@ -75,6 +76,19 @@ export function DashboardView({
             <div>
               <div className="text-xs font-black">إضافة مسير جديد</div>
               <div className="text-[10px] text-blue-600 font-normal">احتساب واعتماد الشهور</div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate('cheques')}
+            className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-50/70 hover:bg-amber-100/70 text-amber-950 font-bold text-xs transition border border-amber-200 shadow-2xs text-right active:scale-95"
+          >
+            <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Landmark className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-black">الشيكات المصرفية</div>
+              <div className="text-[10px] text-amber-700 font-normal">طباعة وإصدار الشيكات</div>
             </div>
           </button>
 

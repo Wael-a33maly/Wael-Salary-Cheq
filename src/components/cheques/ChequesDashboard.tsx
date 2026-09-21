@@ -10,7 +10,8 @@ import {
   Printer, 
   TrendingUp, 
   Building,
-  UserCheck
+  UserCheck,
+  FileText
 } from 'lucide-react';
 import { BankAccount, ChequeBook, IssuedCheque, Beneficiary } from '../../types';
 
@@ -26,7 +27,9 @@ interface ChequesDashboardProps {
   onNavigateToBeneficiaries: () => void;
   onNavigateToReports: (reportType?: string) => void;
   onPrintCheque: (cheque: IssuedCheque) => void;
+  onPrintReceiptOrEnvelope?: (cheque: IssuedCheque) => void;
   onStatusChange: (chequeId: string, newStatus: 'issued' | 'cashed' | 'cancelled') => void;
+  onOpenSettings?: (bookId?: string) => void;
 }
 
 export function ChequesDashboard({
@@ -41,6 +44,7 @@ export function ChequesDashboard({
   onNavigateToBeneficiaries,
   onNavigateToReports,
   onPrintCheque,
+  onPrintReceiptOrEnvelope,
   onStatusChange,
 }: ChequesDashboardProps) {
   // Filter data by selected account (or all)
@@ -83,49 +87,6 @@ export function ChequesDashboard({
 
   return (
     <div className="space-y-6">
-      
-      {/* Top Banner: Account Switcher and Key Indicators */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600">
-            <Landmark className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-black text-slate-900">
-                لوحة تحكم منظومة طباعة وإدارة الشيكات المصرفية
-              </h2>
-              <span className="bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-full font-mono">
-                دينار كويتي (KWD)
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              إصدار الشيكات، متابعة الصرف، تدقيق أرقام الدفاتر، وتقارير المقاصة لكافة الحسابات
-            </p>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => onNavigateToIssue()}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-md transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تحرير وإصدار شيك جديد</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigateToBeneficiaries()}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition"
-          >
-            <UserCheck className="w-4 h-4 text-slate-600" />
-            <span>دليل المستفيدين ({beneficiaries.length})</span>
-          </button>
-        </div>
-      </div>
 
       {/* Account Selector Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -469,8 +430,20 @@ export function ChequesDashboard({
                           title="معاينة وطباعة الشيك"
                         >
                           <Printer className="w-3.5 h-3.5 text-blue-600" />
-                          <span>طباعة</span>
+                          <span>شيك</span>
                         </button>
+
+                        {onPrintReceiptOrEnvelope && (
+                          <button
+                            type="button"
+                            onClick={() => onPrintReceiptOrEnvelope(c)}
+                            className="flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-[11px] transition"
+                            title="طباعة سند الصرف / إيصال الاستلام والمظروف"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-amber-600" />
+                            <span>سند/ظرف</span>
+                          </button>
+                        )}
 
                         {c.status === 'issued' && (
                           <button

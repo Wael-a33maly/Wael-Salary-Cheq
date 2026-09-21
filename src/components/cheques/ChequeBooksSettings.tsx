@@ -125,7 +125,18 @@ export function ChequeBooksSettings({
 
   const handleOpenEditBook = (b: ChequeBook) => {
     setEditingBook(b);
-    setBookForm({ ...b });
+    setBookForm({
+      bankAccountId: b.bankAccountId,
+      bookCode: b.bookCode,
+      bookName: b.bookName,
+      serialFrom: b.serialFrom,
+      serialTo: b.serialTo,
+      totalLeaves: b.totalLeaves,
+      currentSerial: b.currentSerial,
+      receivedDate: b.receivedDate,
+      status: b.status,
+      notes: b.notes || '',
+    });
     setIsBookModalOpen(true);
   };
 
@@ -307,30 +318,136 @@ export function ChequeBooksSettings({
               <span>إعدادات معايرة طباعة الشيكات الافتراضية</span>
             </h3>
 
-            <form onSubmit={handleSaveSettings} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    الإزاحة الأفقية X (mm):
-                  </label>
-                  <input
-                    type="number"
-                    value={settingsForm.offsetX}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, offsetX: parseFloat(e.target.value) || 0 })}
-                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
+            <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="font-bold text-slate-800 block mb-2">إزاحة الشيك ككل (Global Offset):</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">
+                      الإزاحة الأفقية X (mm):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.offsetX}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, offsetX: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">
+                      الإزاحة الرأسية Y (mm):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.offsetY}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, offsetY: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ضبط الحقول المنفردة */}
+              <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200 space-y-3">
+                <span className="font-bold text-emerald-900 block">معايرة كل حقل منفرداً (أعلى/أسفل/يمين/يسار):</span>
+                
+                {/* التاريخ */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل التاريخ X (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.dateOffsetX || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, dateOffsetX: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل التاريخ Y (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.dateOffsetY || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, dateOffsetY: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    الإزاحة الرأسية Y (mm):
-                  </label>
-                  <input
-                    type="number"
-                    value={settingsForm.offsetY}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, offsetY: parseFloat(e.target.value) || 0 })}
-                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
+                {/* المستفيد */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل المستفيد X (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.payeeOffsetX || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, payeeOffsetX: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل المستفيد Y (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.payeeOffsetY || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, payeeOffsetY: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* التفقيط */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل التفقيط X (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.wordsOffsetX || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, wordsOffsetX: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل التفقيط Y (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.wordsOffsetY || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, wordsOffsetY: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* المبلغ بالأرقام */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل المبلغ بالأرقام X (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.amountOffsetX || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, amountOffsetX: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-medium mb-1">حقل المبلغ بالأرقام Y (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={settingsForm.amountOffsetY || 0}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, amountOffsetY: parseFloat(e.target.value) || 0 })}
+                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -338,19 +455,9 @@ export function ChequeBooksSettings({
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={settingsForm.defaultCrossing}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, defaultCrossing: e.target.checked })}
-                    className="rounded text-blue-600"
-                  />
-                  <span className="text-slate-700 font-bold">تسطير الشيكات تلقائياً (للمستفيد الأول فقط)</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
                     checked={settingsForm.defaultBearerCrossing}
                     onChange={(e) => setSettingsForm({ ...settingsForm, defaultBearerCrossing: e.target.checked })}
-                    className="rounded text-blue-600"
+                    className="rounded text-emerald-600"
                   />
                   <span className="text-slate-700 font-bold">شطب عبارة "أو لحامله" تلقائياً</span>
                 </label>
@@ -358,7 +465,7 @@ export function ChequeBooksSettings({
 
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-md transition mt-2"
+                className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md transition mt-2"
               >
                 <Save className="w-4 h-4" />
                 <span>حفظ إعدادات المعايرة</span>

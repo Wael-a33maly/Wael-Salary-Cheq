@@ -20,7 +20,11 @@ import {
   AlertTriangle,
   Archive,
   WalletCards,
-  Landmark
+  Landmark,
+  Receipt,
+  ListOrdered,
+  FileSpreadsheet,
+  BookOpen
 } from 'lucide-react';
 
 export const REPORTS_SUB_ITEMS = [
@@ -43,6 +47,8 @@ interface SidebarProps {
   residencyAlertCount: number;
   activeReportId?: number;
   onSelectReportId?: (id: number) => void;
+  activeChequeSubTab?: string;
+  onSelectChequeSubTab?: (subTab: string) => void;
   onLogout: () => void;
 }
 
@@ -56,12 +62,16 @@ export function Sidebar({
   residencyAlertCount,
   activeReportId = 1,
   onSelectReportId,
+  activeChequeSubTab = 'dashboard',
+  onSelectChequeSubTab,
   onLogout,
 }: SidebarProps) {
   // State for collapsible payroll tab / section
   const [payrollSectionOpen, setPayrollSectionOpen] = useState(true);
   // State for collapsible reports sub-menu
   const [reportsOpen, setReportsOpen] = useState(true);
+  // State for collapsible cheques section
+  const [chequesSectionOpen, setChequesSectionOpen] = useState(true);
 
   // Close sidebar on mobile when navigating
   const handleNavClick = (tabId: string) => {
@@ -88,6 +98,25 @@ export function Sidebar({
       setPayrollSectionOpen(true);
     }
   }, [activeTab, isPayrollActive]);
+
+  // Sub-items belonging to the "طباعة الشيكات" section
+  const chequeSubItems = [
+    { id: 'dashboard', label: 'لوحة التحكم والداشبورد', icon: LayoutDashboard },
+    { id: 'issue', label: 'تحرير وطباعة شيك', icon: Receipt, badge: 'CBK' },
+    { id: 'ledger', label: 'سجل الشيكات والمتابعة', icon: ListOrdered },
+    { id: 'beneficiaries', label: 'شاشة تسجيل المستفيدين', icon: Users },
+    { id: 'reports', label: 'مركز التقارير المصرفية', icon: FileSpreadsheet },
+    { id: 'settings', label: 'دفاتر الشيكات والحسابات', icon: BookOpen },
+  ];
+
+  const isChequesActive = activeTab === 'cheques';
+
+  // Auto expand cheques section if active
+  useEffect(() => {
+    if (isChequesActive) {
+      setChequesSectionOpen(true);
+    }
+  }, [isChequesActive]);
 
   return (
     <>
@@ -159,32 +188,108 @@ export function Sidebar({
             )}
           </button>
 
-          {/* New Primary Tab: طباعة الشيكات البنكية (CBK) */}
-          <button
-            onClick={() => handleNavClick('cheques')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition group relative ${
-              activeTab === 'cheques'
-                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            } ${isCollapsed ? 'justify-center' : 'justify-start'}`}
-            title={isCollapsed ? 'طباعة الشيكات (CBK)' : undefined}
-          >
-            <Landmark className="w-4 h-4 flex-shrink-0 text-amber-400" />
-            {!isCollapsed && (
-              <span className="truncate flex-1 text-right">طباعة الشيكات</span>
-            )}
-            {!isCollapsed && (
-              <span className="text-[9px] bg-amber-500/30 text-amber-300 border border-amber-500/50 px-1.5 py-0.5 rounded-full font-bold">
-                CBK
-              </span>
-            )}
+          {/* SECTION: طباعة الشيكات البنكية (CBK) */}
+          <div className="pt-1">
+            {/* Header / Group Button for الشيكات */}
+            <button
+              onClick={() => {
+                if (isCollapsed) {
+                  setIsCollapsed(false);
+                  setChequesSectionOpen(true);
+                  handleNavClick('cheques');
+                } else {
+                  if (activeTab !== 'cheques') {
+                    handleNavClick('cheques');
+                    setChequesSectionOpen(true);
+                  } else {
+                    setChequesSectionOpen(!chequesSectionOpen);
+                  }
+                }
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition group ${
+                isChequesActive && !chequesSectionOpen
+                  ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40'
+                  : isChequesActive
+                  ? 'bg-amber-950/40 text-amber-200 border border-amber-500/30'
+                  : 'text-slate-200 hover:bg-slate-800/80'
+              } ${isCollapsed ? 'justify-center' : ''}`}
+              title="قسم طباعة الشيكات (CBK)"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Landmark className={`w-4 h-4 flex-shrink-0 ${isChequesActive ? 'text-amber-400' : 'text-slate-400'}`} />
+                {!isCollapsed && (
+                  <span className="font-black tracking-wide text-xs text-slate-100">
+                    طباعة الشيكات
+                  </span>
+                )}
+                {!isCollapsed && (
+                  <span className="text-[9px] bg-amber-500/30 text-amber-300 border border-amber-500/50 px-1.5 py-0.5 rounded-full font-bold">
+                    CBK
+                  </span>
+                )}
+              </div>
 
-            {isCollapsed && (
-              <div className="absolute right-full mr-2 hidden group-hover:block bg-slate-800 text-white text-xs font-bold px-2.5 py-1 rounded-md whitespace-nowrap shadow-xl border border-slate-700 z-50 pointer-events-none">
-                طباعة الشيكات (البنك التجاري)
+              {!isCollapsed && (
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                    chequesSectionOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              )}
+            </button>
+
+            {/* Sub-items list of الشيكات */}
+            {(!isCollapsed ? chequesSectionOpen : isChequesActive) && (
+              <div className={`space-y-1 mt-1 ${!isCollapsed ? 'mr-2 pr-2 border-r-2 border-amber-600/50' : ''}`}>
+                {chequeSubItems.map((item) => {
+                  const Icon = item.icon;
+                  const isSubActive = activeTab === 'cheques' && (activeChequeSubTab === item.id || (!activeChequeSubTab && item.id === 'dashboard'));
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        handleNavClick('cheques');
+                        if (onSelectChequeSubTab) {
+                          onSelectChequeSubTab(item.id);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition group relative ${
+                        isSubActive
+                          ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      } ${isCollapsed ? 'justify-center' : 'justify-between'}`}
+                      title={isCollapsed ? item.label : undefined}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isSubActive ? 'text-white' : 'text-amber-400/80'}`} />
+                        {!isCollapsed && (
+                          <span className="truncate text-right">{item.label}</span>
+                        )}
+                      </div>
+
+                      {!isCollapsed && item.badge && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                          isSubActive
+                            ? 'bg-amber-800/80 text-amber-200 border border-amber-400/40'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+
+                      {/* Tooltip for Collapsed State */}
+                      {isCollapsed && (
+                        <div className="absolute right-full mr-2 hidden group-hover:block bg-slate-800 text-white text-xs font-bold px-2.5 py-1 rounded-md whitespace-nowrap shadow-xl border border-slate-700 z-50 pointer-events-none">
+                          {item.label}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
-          </button>
+          </div>
 
           {/* 2. SECTION / TAB: الرواتب (Contains Payroll, Receipts, Employees, Branches, Reports) */}
           <div className="pt-1">

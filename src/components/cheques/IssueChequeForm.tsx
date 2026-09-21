@@ -8,10 +8,12 @@ import {
   Landmark, 
   Sliders, 
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Languages,
+  Image as ImageIcon
 } from 'lucide-react';
 import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings } from '../../types';
-import { tafqeetKwd } from '../../utils/tafqeetKwd';
+import { tafqeetKwd, tafqeetKwdEn } from '../../utils/tafqeetKwd';
 
 interface IssueChequeFormProps {
   bankAccounts: BankAccount[];
@@ -58,11 +60,13 @@ export function IssueChequeForm({
   const [selectedBeneficiaryId, setSelectedBeneficiaryId] = useState<string>(prefillBeneficiaryId || '');
   const [beneficiaryName, setBeneficiaryName] = useState<string>('');
   const [amount, setAmount] = useState<number>(1000.000);
-  const [amountInWords, setAmountInWords] = useState<string>('');
+  const [tafqeetLang, setTafqeetLang] = useState<'ar' | 'en'>('ar');
+  const [amountInWords, setAmountInWords] = useState<string>(tafqeetKwd(1000.000));
   const [isManualWords, setIsManualWords] = useState<boolean>(false);
+  const [showRealImagePreview, setShowRealImagePreview] = useState<boolean>(false);
   const [issueDate, setIssueDate] = useState<string>(todayStr);
   const [dueDate, setDueDate] = useState<string>(todayStr);
-  const [isCrossed, setIsCrossed] = useState<boolean>(printSettings.defaultCrossing ?? true);
+  const [isCrossed, setIsCrossed] = useState<boolean>(false); // غير مطلوب طباعتها لأنها مطبوعة مسبقاً
   const [bearerCrossed, setBearerCrossed] = useState<boolean>(printSettings.defaultBearerCrossing ?? true);
   const [purpose, setPurpose] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -96,23 +100,29 @@ export function IssueChequeForm({
     }
   }, [selectedBeneficiaryId, beneficiaries]);
 
-  // Auto-generate Tafqeet when amount changes (unless user manually modified)
+  // Auto-generate Tafqeet when amount or language changes (unless user manually modified)
   useEffect(() => {
     if (!isManualWords) {
-      setAmountInWords(tafqeetKwd(amount));
+      setAmountInWords(tafqeetLang === 'en' ? tafqeetKwdEn(amount) : tafqeetKwd(amount));
     }
-  }, [amount, isManualWords]);
+  }, [amount, tafqeetLang, isManualWords]);
 
   const handleAmountChange = (val: number) => {
     setAmount(val);
     if (!isManualWords) {
-      setAmountInWords(tafqeetKwd(val));
+      setAmountInWords(tafqeetLang === 'en' ? tafqeetKwdEn(val) : tafqeetKwd(val));
     }
+  };
+
+  const handleTafqeetLangChange = (lang: 'ar' | 'en') => {
+    setTafqeetLang(lang);
+    setIsManualWords(false);
+    setAmountInWords(lang === 'en' ? tafqeetKwdEn(amount) : tafqeetKwd(amount));
   };
 
   const handleResetWordsToAuto = () => {
     setIsManualWords(false);
-    setAmountInWords(tafqeetKwd(amount));
+    setAmountInWords(tafqeetLang === 'en' ? tafqeetKwdEn(amount) : tafqeetKwd(amount));
   };
 
   // Build the issued cheque object
@@ -127,11 +137,13 @@ export function IssueChequeForm({
       beneficiaryId: selectedBeneficiaryId || undefined,
       beneficiaryName: beneficiaryName.trim() || 'لحامله',
       amount: amount || 0,
-      amountInWordsAr: amountInWords || tafqeetKwd(amount),
+      amountInWordsAr: tafqeetLang === 'ar' ? amountInWords : tafqeetKwd(amount),
+      amountInWordsEn: tafqeetLang === 'en' ? amountInWords : tafqeetKwdEn(amount),
+      tafqeetLang,
       issueDate,
       dueDate,
       status: 'issued',
-      isCrossed,
+      isCrossed: false, // لا تطبع جملة Account Payee Only بخطين
       bearerCrossed,
       purpose: purpose.trim(),
       notes: notes.trim(),
@@ -310,6 +322,38 @@ export function IssueChequeForm({
                   <span>حفظ هذا الاسم تلقائياً في دليل المستفيدين للمعاملات القادمة</span>
                 </label>
               )}
+
+              {/* اختيار لغة التفقيط عند إدخال المستفيد */}
+              <div className="mt-2.5 p-2 bg-emerald-50/80 border border-emerald-300/80 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-1.5 text-emerald-950 font-bold">
+                  <Languages className="w-4 h-4 text-emerald-700" />
+                  <span>لغة التفقيط المعتمدة للشيك:</span>
+                </div>
+                <div className="inline-flex bg-white rounded-lg p-0.5 border border-emerald-300 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleTafqeetLangChange('ar')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition ${
+                      tafqeetLang === 'ar'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    العربية (فقط ... دينار لا غير)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTafqeetLangChange('en')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition ${
+                      tafqeetLang === 'en'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    English (Kuwaiti Dinars ... Only)
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Amount in KWD and Auto Tafqeet */}
@@ -461,155 +505,136 @@ export function IssueChequeForm({
 
         {/* Left: Live Visual Cheque Preview: 6 Cols on XL */}
         <div className="xl:col-span-6 space-y-4">
-          <div className="bg-slate-900 text-white p-4 rounded-2xl flex justify-between items-center">
+          <div className="bg-slate-900 text-white p-3.5 rounded-2xl flex flex-wrap justify-between items-center gap-2">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-xs font-bold">معاينة حية ومباشرة لشيك البنك التجاري الكويتي (CBK)</span>
             </div>
-            <span className="text-[11px] font-mono text-amber-400 font-bold">Live Preview</span>
+            
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRealImagePreview(!showRealImagePreview)}
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition border flex items-center gap-1 ${
+                  showRealImagePreview
+                    ? 'bg-emerald-600 text-white border-emerald-500'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+                }`}
+                title="إظهار صورة الشيك الفعلي المقصوصة كخلفية"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>صورة الشيك الفعلية</span>
+              </button>
+              <span className="text-[10px] font-mono text-emerald-400 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                178mm × 82mm
+              </span>
+            </div>
           </div>
 
-          {/* Cheque Graphic */}
+          {/* Cheque Graphic with Exact 178mm x 82mm Aspect Ratio */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto flex justify-center items-center">
             
-            <div className="w-[620px] h-[270px] relative bg-gradient-to-br from-amber-50/70 via-white to-amber-50/50 border-2 border-amber-900/60 rounded-xl shadow-lg p-4 select-none flex flex-col justify-between">
+            <div 
+              className="w-[580px] h-[268px] relative rounded-xl shadow-md p-3 select-none flex flex-col justify-between overflow-hidden border border-emerald-800/30"
+              style={
+                showRealImagePreview
+                  ? {
+                      backgroundImage: `url('/cbk_cheque_template.jpg')`,
+                      backgroundSize: '100% 100%',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
+                    }
+                  : {
+                      backgroundColor: '#f4faf7',
+                    }
+              }
+            >
               
-              {/* Pattern Simulation */}
-              <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#92400e_1px,transparent_1px)] [background-size:10px_10px]" />
-
-              {/* Crossing Lines Top Left */}
-              {isCrossed && (
-                <div className="absolute top-2 left-4 z-20 border-l-2 border-r-2 border-slate-800 h-14 w-24 -rotate-12 flex flex-col justify-center items-center text-[8px] font-black uppercase tracking-wider text-slate-900">
-                  <div className="bg-white/80 px-1 whitespace-nowrap">A/C PAYEE ONLY</div>
-                  <div className="bg-white/80 px-1 whitespace-nowrap text-[7px] font-sans">
-                    للمستفيد الأول فقط
+              {/* If real image is toggled off, show the vector representation */}
+              {!showRealImagePreview && (
+                <>
+                  <div 
+                    className="absolute inset-0 pointer-events-none opacity-20"
+                    style={{
+                      backgroundImage: `radial-gradient(#00875A 0.75px, transparent 0.75px), radial-gradient(#00875A 0.75px, #f4faf7 0.75px)`,
+                      backgroundSize: '10px 10px',
+                      backgroundPosition: '0 0, 5px 5px',
+                    }}
+                  />
+                  <div className="flex justify-end items-start pl-8">
+                    <div className="flex items-center gap-1.5 text-right">
+                      <div>
+                        <div className="flex items-center justify-end gap-1 leading-none">
+                          <span className="text-[10px] font-bold font-sans text-[#00875A]">Al-Tijari</span>
+                          <span className="text-sm font-black font-serif text-[#00875A]">التجاري</span>
+                        </div>
+                        <div className="text-[6.5px] font-bold text-[#00875A]/90 mt-0.5">
+                          البنك التجاري الكويتي (ش.م.ك.ع)
+                        </div>
+                      </div>
+                      <svg viewBox="0 0 100 100" className="w-6 h-6 text-[#00875A]" fill="currentColor">
+                        <path d="M50 0 L58 35 L95 20 L68 50 L95 80 L58 65 L50 100 L42 65 L5 80 L32 50 L5 20 L42 35 Z" />
+                      </svg>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
-              {/* Header */}
-              <div className="flex justify-between items-start border-b border-amber-900/20 pb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-full border border-amber-800 flex items-center justify-center bg-amber-700 text-white font-serif font-black text-sm">
-                    ★
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-amber-950 font-serif leading-tight">
-                      البنك التجاري الكويتي
-                    </h3>
-                    <div className="text-[9px] font-bold text-amber-900 uppercase font-sans">
-                      Commercial Bank of Kuwait
-                    </div>
-                    <div className="text-[8px] text-amber-800/80 font-mono">
-                      {activeAccount.branchName}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Serial and Date */}
-                <div className="text-left space-y-1">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <span className="text-[9px] font-bold text-amber-900">رقم الشيك:</span>
-                    <span className="font-mono font-black text-xs text-slate-900 bg-amber-100/70 px-1.5 py-0.5 rounded border border-amber-300">
-                      {String(chequeSerial).padStart(8, '0')}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-1 text-[10px] font-mono">
-                    <span className="text-[9px] text-amber-900 font-bold ml-1">التاريخ:</span>
-                    <div className="flex items-center gap-0.5">
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {dayStr[0]}
-                      </div>
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {dayStr[1]}
-                      </div>
-                    </div>
-                    <span>/</span>
-                    <div className="flex items-center gap-0.5">
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {monthStr[0]}
-                      </div>
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {monthStr[1]}
-                      </div>
-                    </div>
-                    <span>/</span>
-                    <div className="flex items-center gap-0.5">
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {yearStr[0]}
-                      </div>
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {yearStr[1]}
-                      </div>
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {yearStr[2]}
-                      </div>
-                      <div className="w-4 h-5 bg-white border border-amber-900/40 flex items-center justify-center font-bold text-slate-900 text-xs">
-                        {yearStr[3]}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              {/* 1. Date Field (التاريخ) */}
+              <div 
+                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-[11.5px] tracking-wider"
+                style={{
+                  right: '34px',
+                  top: '84px',
+                  width: '120px',
+                }}
+              >
+                <span className="bg-white/70 px-1.5 py-0.5 rounded shadow-2xs border border-slate-300">
+                  {dayStr}/{monthStr}/{yearStr}
+                </span>
               </div>
 
-              {/* Body */}
-              <div className="space-y-2 py-1">
-                {/* Payee */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-amber-950 whitespace-nowrap">
-                    ادفعوا لأمر:
-                  </span>
-                  <div className="flex-1 relative border-b border-slate-700/60 pb-0.5">
-                    <span className="text-xs font-black text-slate-950 font-serif px-1">
-                      {beneficiaryName || '...................................................'}
-                    </span>
-                    {bearerCrossed && (
-                      <span className="absolute left-0 top-0.5 text-[9px] font-bold text-slate-800 line-through decoration-rose-600">
-                        أو لحامله
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Words of Sum & Box */}
-                <div className="flex items-start gap-1.5">
-                  <span className="text-[10px] font-bold text-amber-950 whitespace-nowrap pt-0.5">
-                    مبلغ وقدره:
-                  </span>
-                  <div className="flex-1 border-b border-slate-700/60 pb-0.5">
-                    <span className="text-[11px] font-black text-slate-900 font-serif leading-tight px-1">
-                      {amountInWords || '...................................................'}
-                    </span>
-                  </div>
-
-                  {/* Amount Box */}
-                  <div className="mr-1 min-w-[130px] h-9 bg-amber-100/60 border border-amber-900/60 rounded px-2 flex items-center justify-between">
-                    <span className="text-[9px] font-black text-amber-950">د.ك</span>
-                    <span className="text-xs font-mono font-black text-slate-950">
-                      #{amount.toFixed(3)}#
-                    </span>
-                  </div>
-                </div>
+              {/* 2. Beneficiary Field (إدفعوا لأمر) */}
+              <div 
+                className="absolute flex items-center font-serif font-black text-slate-950 text-[13px] px-1 truncate"
+                style={{
+                  left: '110px',
+                  top: '112px',
+                  width: '360px',
+                }}
+              >
+                <span className="bg-white/80 px-2 py-0.5 rounded shadow-2xs border border-slate-300/80 truncate block w-full text-right">
+                  {beneficiaryName || '...................................................'}
+                </span>
               </div>
 
-              {/* Bottom Row */}
-              <div className="flex justify-between items-end pt-1">
-                <div className="text-[9px] text-slate-600 max-w-[220px] truncate">
-                  {purpose ? `البيان: ${purpose}` : `حساب رقم: ${activeAccount.accountNumber}`}
-                </div>
-
-                <div className="text-center w-36">
-                  <div className="h-6 border-b border-slate-700/70 mb-0.5" />
-                  <div className="text-[8px] font-bold text-amber-950">
-                    التوقيع المعتمد / Authorized Signature
-                  </div>
-                </div>
+              {/* 3. Amount in Words / Tafqeet (دينار كويتي) */}
+              <div 
+                className="absolute flex items-center font-sans font-bold text-slate-900 text-[11px] leading-tight px-1"
+                style={{
+                  left: '110px',
+                  top: '146px',
+                  width: '260px',
+                }}
+              >
+                <span className="bg-white/80 px-2 py-0.5 rounded shadow-2xs border border-slate-300/80 truncate block w-full">
+                  {amountInWords || '...................................................'}
+                </span>
               </div>
 
-              {/* MICR Line */}
-              <div className="pt-1 border-t border-amber-900/20 text-center font-mono text-[10px] tracking-[0.2em] text-slate-900 font-bold select-all">
-                ⑈ {String(chequeSerial).padStart(8, '0')} ⑈ 019 ⑈ {activeAccount.accountNumber} ⑈ 01
+              {/* 4. Amount in Digits with single # at both ends (KD Box) */}
+              <div 
+                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-[13.5px] tracking-wider"
+                style={{
+                  right: '30px',
+                  top: '144px',
+                  width: '140px',
+                  height: '34px',
+                }}
+              >
+                <span className="bg-white px-3 py-1 rounded shadow-xs border-2 border-[#00875A] font-black">
+                  #{amount.toFixed(3)}#
+                </span>
               </div>
 
             </div>
@@ -617,13 +642,13 @@ export function IssueChequeForm({
           </div>
 
           {/* Helper details */}
-          <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl text-xs text-amber-900 space-y-1">
-            <div className="font-bold flex items-center gap-1.5">
-              <AlertCircle className="w-4 h-4 text-amber-600" />
-              <span>ملاحظات الإصدار والطباعة:</span>
+          <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl text-xs text-emerald-950 space-y-1">
+            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+              <AlertCircle className="w-4 h-4 text-emerald-600" />
+              <span>ملاحظات الإصدار والطباعة وفق المقاسات المعتمدة:</span>
             </div>
-            <p className="text-[11px] text-amber-800 leading-relaxed">
-              عند النقر على "حفظ ومعاينة الطباعة"، سيتم فتح شاشة الطباعة المخصصة مع خيارين: إما طباعة السند والشيك كاملاً لملف الأرشيف المحاسبي، أو الطباعة المباشرة على ورقة الشيك الفعلي الصادرة من البنك التجاري الكويتي مع ضبط الملليمترات بدقة.
+            <p className="text-[11px] text-emerald-800 leading-relaxed">
+              تمت معايرة تصميم شيك البنك التجاري الكويتي (CBK) وفق الأبعاد الرسمية (178mm × 82mm) مع دعم التفقيط بالعربية والإنجليزية وخيارات الطباعة على الورق الفعلي أو ورقة A4.
             </p>
           </div>
         </div>

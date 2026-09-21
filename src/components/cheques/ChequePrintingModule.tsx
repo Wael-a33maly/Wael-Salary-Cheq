@@ -31,25 +31,64 @@ import { BeneficiariesView } from './BeneficiariesView';
 import { ChequeReportsView } from './ChequeReportsView';
 import { ChequeBooksSettings } from './ChequeBooksSettings';
 import { CbkChequePrint } from './CbkChequePrint';
+import { ChequeReceiptAndEnvelopeModal } from './ChequeReceiptAndEnvelopeModal';
 
 interface ChequePrintingModuleProps {
   initialSubTab?: string;
   initialChequeIdToPrint?: string;
+  activeSubTab?: string;
+  onSubTabChange?: (tab: string) => void;
+  companyName?: string;
 }
 
 export function ChequePrintingModule({ 
   initialSubTab = 'dashboard', 
-  initialChequeIdToPrint 
+  initialChequeIdToPrint,
+  activeSubTab,
+  onSubTabChange,
+  companyName,
 }: ChequePrintingModuleProps) {
   // Master State
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(INITIAL_BANK_ACCOUNTS);
   const [chequeBooks, setChequeBooks] = useState<ChequeBook[]>(INITIAL_CHEQUE_BOOKS);
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>(INITIAL_BENEFICIARIES);
   const [issuedCheques, setIssuedCheques] = useState<IssuedCheque[]>(INITIAL_ISSUED_CHEQUES);
-  const [printSettings, setPrintSettings] = useState<ChequePrintSettings>(DEFAULT_PRINT_SETTINGS);
+  const [printSettings, setPrintSettings] = useState<ChequePrintSettings>(() => {
+    try {
+      const saved = localStorage.getItem('app_cheque_print_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Ensure default is vector_template as requested by user
+        if (!parsed.templateMode || parsed.templateMode === 'scanned_image') {
+          parsed.templateMode = 'vector_template';
+        }
+        return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return DEFAULT_PRINT_SETTINGS;
+  });
+
+  const handleUpdatePrintSettings = (newSettings: ChequePrintSettings) => {
+    setPrintSettings(newSettings);
+    try {
+      localStorage.setItem('app_cheque_print_settings', JSON.stringify(newSettings));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Navigation State
-  const [currentSubTab, setCurrentSubTab] = useState<string>(initialSubTab);
+  const [internalSubTab, setInternalSubTab] = useState<string>(initialSubTab);
+  const currentSubTab = activeSubTab !== undefined ? activeSubTab : internalSubTab;
+
+  const setCurrentSubTab = (tab: string) => {
+    setInternalSubTab(tab);
+    if (onSubTabChange) {
+      onSubTabChange(tab);
+    }
+  };
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
   const [ledgerInitialFilter, setLedgerInitialFilter] = useState<'all' | 'issued' | 'cashed' | 'cancelled'>('all');
   const [reportsInitialTab, setReportsInitialTab] = useState<string>('cashed');
@@ -60,6 +99,9 @@ export function ChequePrintingModule({
   const [printingCheque, setPrintingCheque] = useState<IssuedCheque | null>(
     initialChequeIdToPrint ? issuedCheques.find((c) => c.id === initialChequeIdToPrint) || null : null
   );
+
+  // Receipt & Envelope modal state
+  const [receiptEnvelopeCheque, setReceiptEnvelopeCheque] = useState<IssuedCheque | null>(null);
 
   // Handlers for data updates
   const handleSaveCheque = (newCheque: IssuedCheque) => {
@@ -102,10 +144,19 @@ export function ChequePrintingModule({
   };
 
   // Add Beneficiary
-  const handleAddBeneficiary = (ben: Omit<Beneficiary, 'id' | 'createdAt'>) => {
+  const handleAddBeneficiary = (ben: Partial<Beneficiary>) => {
     const newBen: Beneficiary = {
-      ...ben,
       id: `ben-${Date.now()}`,
+      nameAr: ben.nameAr || '',
+      nameEn: ben.nameEn || '',
+      civilIdOrCR: ben.civilIdOrCR || '',
+      category: ben.category || 'vendor',
+      phoneNumber: ben.phoneNumber || '',
+      bankName: ben.bankName || '',
+      iban: ben.iban || '',
+      bankAccountId: ben.bankAccountId || 'all',
+      notes: ben.notes || '',
+      status: ben.status || 'active',
       createdAt: new Date().toISOString().split('T')[0],
     };
     setBeneficiaries((prev) => [...prev, newBen]);
@@ -179,22 +230,33 @@ export function ChequePrintingModule({
   return (
     <div className="space-y-6">
       
-      {/* Top Main Navigation for Cheque Printing */}
+      {/* Top Main Header for Cheque Printing */}
       <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 print:hidden">
         
-        {/* Module Title */}
+        {/* Module Title & Active Sub-Tab Indicator */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-amber-600 flex items-center justify-center text-white shadow-md">
             <Landmark className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base font-black text-slate-900">
                 منظومة طباعة الشيكات البنكية وإدارة الدفاتر
               </h1>
               <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-300">
-                البنك التجاري الكويتي CBK (د.ك)
+                البنك التجاري CBK
               </span>
+              <span className="text-slate-300">|</span>
+              {(() => {
+                const activeInfo = subTabs.find((t) => t.id === currentSubTab);
+                const ActiveIcon = activeInfo?.icon || LayoutDashboard;
+                return (
+                  <span className="font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200/80 flex items-center gap-1 text-xs">
+                    <ActiveIcon className="w-3.5 h-3.5 text-amber-600" />
+                    {activeInfo?.label || 'لوحة التحكم والداشبورد'}
+                  </span>
+                );
+              })()}
             </div>
             <p className="text-[11px] text-slate-500">
               دعم متعدد الحسابات البنكية، تتبع تسلسل الدفاتر، التفقيط التلقائي، والطباعة الدقيقة
@@ -210,35 +272,12 @@ export function ChequePrintingModule({
               setPrefillBeneficiaryForIssue('');
               setCurrentSubTab('issue');
             }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-md transition"
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs shadow-md transition"
           >
             <Plus className="w-4 h-4" />
             <span>تحرير شيك جديد</span>
           </button>
         )}
-      </div>
-
-      {/* Sub Tabs Pill Bar */}
-      <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-1.5 overflow-x-auto print:hidden">
-        {subTabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = currentSubTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setCurrentSubTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 ${
-                isActive
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
       </div>
 
       {/* Render Active View */}
@@ -261,6 +300,8 @@ export function ChequePrintingModule({
             setCurrentSubTab('reports');
           }}
           onPrintCheque={(chk) => setPrintingCheque(chk)}
+          onPrintReceiptOrEnvelope={(chk) => setReceiptEnvelopeCheque(chk)}
+          onStatusChange={handleStatusChange}
           onOpenSettings={handleOpenBookSettings}
         />
       )}
@@ -288,6 +329,7 @@ export function ChequePrintingModule({
           selectedAccountId={selectedAccountId}
           onSelectAccount={setSelectedAccountId}
           onPrintCheque={(chk) => setPrintingCheque(chk)}
+          onPrintReceiptOrEnvelope={(chk) => setReceiptEnvelopeCheque(chk)}
           onStatusChange={handleStatusChange}
           onNavigateToIssue={() => {
             setPrefillBeneficiaryForIssue('');
@@ -335,7 +377,7 @@ export function ChequePrintingModule({
           onUpdateAccount={handleUpdateAccount}
           onAddChequeBook={handleAddChequeBook}
           onUpdateChequeBook={handleUpdateChequeBook}
-          onUpdatePrintSettings={setPrintSettings}
+          onUpdatePrintSettings={handleUpdatePrintSettings}
         />
       )}
 
@@ -347,8 +389,21 @@ export function ChequePrintingModule({
             bankAccounts.find((a) => a.id === printingCheque.bankAccountId) || bankAccounts[0]
           }
           printSettings={printSettings}
+          companyName={companyName}
           onClose={() => setPrintingCheque(null)}
-          onUpdateSettings={(newSettings) => setPrintSettings(newSettings)}
+          onUpdatePrintSettings={handleUpdatePrintSettings}
+        />
+      )}
+
+      {/* Cheque Receipt & Envelope Modal */}
+      {receiptEnvelopeCheque && (
+        <ChequeReceiptAndEnvelopeModal
+          cheque={receiptEnvelopeCheque}
+          bankAccount={
+            bankAccounts.find((a) => a.id === receiptEnvelopeCheque.bankAccountId) || bankAccounts[0]
+          }
+          companyName={companyName}
+          onClose={() => setReceiptEnvelopeCheque(null)}
         />
       )}
 

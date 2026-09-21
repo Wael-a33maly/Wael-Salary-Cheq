@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   UserCheck, 
   Search, 
@@ -11,9 +11,15 @@ import {
   CreditCard, 
   ArrowUpRight,
   Landmark,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Tag,
+  Check,
+  X,
+  Palette,
+  Layers
 } from 'lucide-react';
-import { Beneficiary, IssuedCheque, BankAccount } from '../../types';
+import { Beneficiary, IssuedCheque, BankAccount, BeneficiaryCategory } from '../../types';
+import { INITIAL_BENEFICIARY_CATEGORIES } from '../../mockCheques';
 
 interface BeneficiariesViewProps {
   beneficiaries: Beneficiary[];
@@ -45,11 +51,39 @@ export function BeneficiariesView({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBeneficiary, setEditingBeneficiary] = useState<Beneficiary | null>(null);
 
+  // إدارة تصنيفات المستفيدين مع التخزين المحلي
+  const [categories, setCategories] = useState<BeneficiaryCategory[]>(() => {
+    try {
+      const saved = localStorage.getItem('app_beneficiary_categories');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_BENEFICIARY_CATEGORIES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_beneficiary_categories', JSON.stringify(categories));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [categories]);
+
+  // حالة نافذة إدارة التصنيفات
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatColor, setNewCatColor] = useState('blue');
+  const [newCatDesc, setNewCatDesc] = useState('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [editingCatColor, setEditingCatColor] = useState('blue');
+
   // Form State
   const [formData, setFormData] = useState({
     nameAr: '',
     nameEn: '',
-    category: 'vendor' as Beneficiary['category'],
+    category: categories[0]?.id || 'vendor',
     bankAccountId: 'all',
     civilIdOrCR: '',
     bankName: '',
@@ -64,7 +98,7 @@ export function BeneficiariesView({
     setFormData({
       nameAr: '',
       nameEn: '',
-      category: 'vendor',
+      category: categories[0]?.id || 'vendor',
       bankAccountId: selectedAccountId === 'all' ? 'all' : selectedAccountId,
       civilIdOrCR: '',
       bankName: 'البنك التجاري الكويتي (CBK)',
@@ -100,12 +134,113 @@ export function BeneficiariesView({
     if (editingBeneficiary) {
       onUpdateBeneficiary({
         ...editingBeneficiary,
-        ...formData,
+        nameAr: formData.nameAr.trim(),
+        nameEn: formData.nameEn.trim() || undefined,
+        category: formData.category,
+        bankAccountId: formData.bankAccountId,
+        civilIdOrCR: formData.civilIdOrCR.trim() || undefined,
+        bankName: formData.bankName.trim() || undefined,
+        iban: formData.iban.trim() || undefined,
+        phoneNumber: formData.phoneNumber.trim() || undefined,
+        notes: formData.notes.trim() || undefined,
+        status: formData.status,
       });
     } else {
-      onAddBeneficiary(formData);
+      onAddBeneficiary({
+        nameAr: formData.nameAr.trim(),
+        nameEn: formData.nameEn.trim() || undefined,
+        category: formData.category,
+        bankAccountId: formData.bankAccountId,
+        civilIdOrCR: formData.civilIdOrCR.trim() || undefined,
+        bankName: formData.bankName.trim() || undefined,
+        iban: formData.iban.trim() || undefined,
+        phoneNumber: formData.phoneNumber.trim() || undefined,
+        notes: formData.notes.trim() || undefined,
+        status: formData.status,
+      });
     }
     setIsModalOpen(false);
+  };
+
+  // دوال إدارة التصنيفات (CRUD)
+  const handleAddCategory = () => {
+    if (!newCatName.trim()) return;
+    const catId = `cat-${Date.now()}`;
+    const newCategory: BeneficiaryCategory = {
+      id: catId,
+      name: newCatName.trim(),
+      color: newCatColor,
+      description: newCatDesc.trim() || undefined,
+    };
+    setCategories([...categories, newCategory]);
+    setFormData((prev) => ({ ...prev, category: catId }));
+    setNewCatName('');
+    setNewCatDesc('');
+  };
+
+  const handleStartEditCategory = (cat: BeneficiaryCategory) => {
+    setEditingCatId(cat.id);
+    setEditingCatName(cat.name);
+    setEditingCatColor(cat.color || 'blue');
+  };
+
+  const handleSaveEditCategory = (id: string) => {
+    if (!editingCatName.trim()) return;
+    setCategories(
+      categories.map((c) =>
+        c.id === id ? { ...c, name: editingCatName.trim(), color: editingCatColor } : c
+      )
+    );
+    setEditingCatId(null);
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    if (categories.length <= 1) {
+      alert('يجب الإبقاء على تصنيف واحد على الأقل في المنظومة.');
+      return;
+    }
+    if (confirm('هل أنت متأكد من حذف هذا التصنيف؟')) {
+      setCategories(categories.filter((c) => c.id !== id));
+      if (filterCategory === id) {
+        setFilterCategory('all');
+      }
+    }
+  };
+
+  // Helper للحصول على معلومات التصنيف
+  const getCategoryInfo = (catKey: string) => {
+    const found = categories.find((c) => c.id === catKey);
+    if (found) return found;
+
+    const fallbackMap: Record<string, string> = {
+      vendor: 'مورد / مقاول',
+      company: 'شركة / منشأة',
+      government: 'جهة حكومية',
+      employee: 'موظف',
+      individual: 'فرد / مستشار',
+    };
+    return {
+      id: catKey,
+      name: fallbackMap[catKey] || catKey,
+      color: 'slate',
+    };
+  };
+
+  const getColorBadge = (color?: string) => {
+    switch (color) {
+      case 'blue':
+        return 'bg-blue-50 text-blue-800 border-blue-200';
+      case 'purple':
+        return 'bg-purple-50 text-purple-800 border-purple-200';
+      case 'emerald':
+        return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+      case 'amber':
+        return 'bg-amber-50 text-amber-800 border-amber-200';
+      case 'rose':
+        return 'bg-rose-50 text-rose-800 border-rose-200';
+      default:
+        return 'bg-slate-100 text-slate-800 border-slate-200';
+    }
   };
 
   // Filter Beneficiaries
@@ -115,7 +250,7 @@ export function BeneficiariesView({
       if (filterCategory !== 'all' && b.category !== filterCategory) {
         return false;
       }
-      // Account filter: if account chosen, show 'all' or specifically linked to this account
+      // Account filter
       if (selectedAccountId !== 'all') {
         if (b.bankAccountId && b.bankAccountId !== 'all' && b.bankAccountId !== selectedAccountId) {
           return false;
@@ -149,6 +284,16 @@ export function BeneficiariesView({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* زر إدارة التصنيفات */}
+          <button
+            type="button"
+            onClick={() => setIsCategoryModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition border border-slate-200"
+          >
+            <Tag className="w-4 h-4 text-slate-600" />
+            <span>إدارة التصنيفات ({categories.length})</span>
+          </button>
+
           <button
             type="button"
             onClick={handleOpenAdd}
@@ -170,11 +315,11 @@ export function BeneficiariesView({
             className="p-2 border border-slate-300 rounded-xl bg-slate-50 font-bold text-slate-800"
           >
             <option value="all">كافة التصنيفات ({beneficiaries.length})</option>
-            <option value="vendor">موردون ومقاولون</option>
-            <option value="company">شركات ومؤسسات</option>
-            <option value="government">جهات حكومية ورسمية</option>
-            <option value="employee">موظفون ومكافآت</option>
-            <option value="individual">أفراد ومستشارون</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
 
           <span className="font-bold text-slate-600 mr-2">تصفية الحساب:</span>
@@ -212,19 +357,11 @@ export function BeneficiariesView({
           </div>
         ) : (
           filteredList.map((b) => {
-            // Cheques issued for this beneficiary
             const benCheques = issuedCheques.filter(
               (c) => c.beneficiaryId === b.id || c.beneficiaryName === b.nameAr
             );
             const totalAmount = benCheques.reduce((s, c) => s + c.amount, 0);
-
-            // Category badge
-            const categoryLabel =
-              b.category === 'vendor' ? 'مورد / مقاول' :
-              b.category === 'company' ? 'شركة / منشأة' :
-              b.category === 'government' ? 'جهة حكومية' :
-              b.category === 'employee' ? 'موظف' : 'فرد / مستشار';
-
+            const catInfo = getCategoryInfo(b.category);
             const linkedAcc = bankAccounts.find((a) => a.id === b.bankAccountId);
 
             return (
@@ -235,8 +372,8 @@ export function BeneficiariesView({
                 <div>
                   {/* Top Bar of Card */}
                   <div className="flex justify-between items-start gap-2">
-                    <span className="bg-slate-100 text-slate-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                      {categoryLabel}
+                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getColorBadge(catInfo.color)}`}>
+                      {catInfo.name}
                     </span>
 
                     <div className="flex items-center gap-1">
@@ -298,37 +435,34 @@ export function BeneficiariesView({
 
                 {/* Financial Summary for this Beneficiary */}
                 <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <div className="flex justify-between items-center bg-slate-50 p-2 rounded-xl text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">الشيكات المصدرة:</span>
-                      <strong className="font-mono font-bold text-slate-900">{benCheques.length} شيك</strong>
-                    </div>
-                    <div className="text-left">
-                      <span className="text-[10px] text-slate-400 block">إجمالي المبالغ:</span>
-                      <strong className="font-mono font-black text-blue-900 text-sm">
-                        {totalAmount.toFixed(3)} د.ك
-                      </strong>
-                    </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">الشيكات المصدرة:</span>
+                    <strong className="font-mono text-slate-900">{benCheques.length} شيك</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">إجمالي المبالغ:</span>
+                    <strong className="font-mono text-emerald-700 font-bold">
+                      {totalAmount.toFixed(3)} د.ك
+                    </strong>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  {/* Quick Actions */}
+                  <div className="pt-2 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => onIssueChequeForBeneficiary(b.id)}
-                      className="flex items-center justify-center gap-1 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-[11px] transition shadow-xs"
+                      className="flex-1 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition"
                     >
                       <Receipt className="w-3.5 h-3.5" />
-                      <span>تحرير شيك</span>
+                      <span>إصدار شيك</span>
                     </button>
-
                     <button
                       type="button"
                       onClick={() => onViewBeneficiaryReport(b.id)}
-                      className="flex items-center justify-center gap-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] transition"
+                      className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs rounded-xl transition"
+                      title="كشف حساب المستفيد"
                     >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" />
-                      <span>كشف حساب</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -339,36 +473,34 @@ export function BeneficiariesView({
         )}
       </div>
 
-      {/* Add / Edit Beneficiary Modal */}
+      {/* ========================================================================= */}
+      {/* نافذة إضافة وتعديل مستفيد                                                 */}
+      {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 my-6">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 text-right">
+            
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-blue-600" />
-                <span>{editingBeneficiary ? 'تعديل بيانات المستفيد' : 'تسجيل مستفيد جديد في المنظومة'}</span>
+              <h3 className="text-base font-black text-slate-900">
+                {editingBeneficiary ? 'تعديل بيانات المستفيد' : 'تسجيل مستفيد جديد'}
               </h3>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-3 text-xs">
+            <form onSubmit={handleSave} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">
-                  الاسم بالعربية (كما سيطبع بدقة على الشيك): *
+                  الاسم باللغة العربية (كما سيطبع على الشيك): <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="مثال: شركة الخليج للتجارة العامة ذ.م.م"
+                  placeholder="مثال: شركة الخليج للتوريدات والمقاولات العامة"
                   value={formData.nameAr}
                   onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
-                  className="w-full p-2.5 border border-slate-300 rounded-xl font-bold"
+                  className="w-full p-2.5 border border-slate-300 rounded-xl font-bold font-serif text-slate-900"
                 />
               </div>
 
@@ -376,7 +508,7 @@ export function BeneficiariesView({
                 <label className="block text-slate-700 font-bold mb-1">الاسم بالإنجليزية (اختياري):</label>
                 <input
                   type="text"
-                  placeholder="Beneficiary English Name"
+                  placeholder="e.g. Gulf Supplies & General Contracting Co."
                   value={formData.nameEn}
                   onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                   className="w-full p-2.5 border border-slate-300 rounded-xl font-sans"
@@ -385,17 +517,26 @@ export function BeneficiariesView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">التصنيف:</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-slate-700 font-bold">التصنيف:</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryModalOpen(true)}
+                      className="text-[10px] text-blue-600 hover:underline font-bold"
+                    >
+                      + تصنيف جديد
+                    </button>
+                  </div>
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full p-2.5 border border-slate-300 rounded-xl bg-slate-50 font-bold"
                   >
-                    <option value="vendor">مورد / مقاول</option>
-                    <option value="company">شركة ومؤسسة</option>
-                    <option value="government">جهة حكومية ورسمية</option>
-                    <option value="employee">موظف في الشركة</option>
-                    <option value="individual">فرد / مستشار مستقل</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -493,6 +634,171 @@ export function BeneficiariesView({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* نافذة إدارة تصنيفات المستفيدين (تظهر دائماً بالأعلى z-[70] فوق أي نموذج) */}
+      {/* ========================================================================= */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-[70] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 text-right">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                  <Tag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">إدارة تصنيفات المستفيدين</h3>
+                  <p className="text-[11px] text-slate-400">إضافة وتعديل وحذف فئات المستفيدين للفلترة والتنظيم</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsCategoryModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Existing Categories List */}
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <span className="text-[11px] font-bold text-slate-500 block">التصنيفات الحالية ({categories.length}):</span>
+              {categories.map((cat) => (
+                <div 
+                  key={cat.id} 
+                  className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-2"
+                >
+                  {editingCatId === cat.id ? (
+                    <div className="flex-1 flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editingCatName}
+                        onChange={(e) => setEditingCatName(e.target.value)}
+                        className="flex-1 p-1.5 text-xs border border-blue-400 rounded-lg font-bold"
+                        placeholder="اسم التصنيف..."
+                        autoFocus
+                      />
+                      <select
+                        value={editingCatColor}
+                        onChange={(e) => setEditingCatColor(e.target.value)}
+                        className="p-1.5 text-xs border border-slate-300 rounded-lg font-bold"
+                      >
+                        <option value="blue">أزرق</option>
+                        <option value="purple">بنفسجي</option>
+                        <option value="emerald">أخضر</option>
+                        <option value="amber">كهرماني</option>
+                        <option value="rose">وردي</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEditCategory(cat.id)}
+                        className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500"
+                        title="حفظ"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingCatId(null)}
+                        className="p-1.5 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
+                        title="إلغاء"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${getColorBadge(cat.color)}`}>
+                          {cat.name}
+                        </span>
+                        {cat.description && (
+                          <span className="text-[10px] text-slate-400 truncate max-w-[180px]">
+                            {cat.description}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditCategory(cat)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"
+                          title="تعديل اسم ولون التصنيف"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                          title="حذف التصنيف"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add New Category Section */}
+            <div className="border-t border-slate-100 pt-3 space-y-2">
+              <span className="text-xs font-black text-slate-900 block">إضافة تصنيف جديد:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <input
+                  type="text"
+                  placeholder="اسم التصنيف الجديد..."
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="sm:col-span-2 p-2 border border-slate-300 rounded-xl font-bold"
+                />
+                <select
+                  value={newCatColor}
+                  onChange={(e) => setNewCatColor(e.target.value)}
+                  className="p-2 border border-slate-300 rounded-xl bg-slate-50 font-bold"
+                >
+                  <option value="blue">لون أزرق</option>
+                  <option value="purple">لون بنفسجي</option>
+                  <option value="emerald">لون أخضر</option>
+                  <option value="amber">لون كهرماني</option>
+                  <option value="rose">لون وردي</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="وصف مختصر للتصنيف (اختياري)..."
+                  value={newCatDesc}
+                  onChange={(e) => setNewCatDesc(e.target.value)}
+                  className="flex-1 p-2 border border-slate-300 rounded-xl text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCategory}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-xs transition"
+                >
+                  إضافة التصنيف
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
+              >
+                تم والعودة
+              </button>
+            </div>
+
           </div>
         </div>
       )}

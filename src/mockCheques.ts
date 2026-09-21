@@ -1,13 +1,34 @@
-import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings } from './types';
+import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings, BeneficiaryCategory } from './types';
 import { tafqeetKwd } from './utils/tafqeetKwd';
 
 export const INITIAL_CHEQUE_PRINT_SETTINGS: ChequePrintSettings = {
   offsetX: 0,
   offsetY: 0,
-  showBackgroundOnPrint: true,
-  defaultCrossing: true,
+  showBackgroundOnPrint: false,
+  defaultCrossing: true, // تفعيل خاصية التسطير للشيك (Account Payee Only)
   defaultBearerCrossing: true,
+  defaultPrinterName: 'HP LaserJet Pro M404n (درج الشيكات المخصص)',
+  chequeDueDateAlertDays: 7,
+  templateMode: 'vector_template', // التصميم الأصلي المتجهي لشيك البنك التجاري
+  dateOffsetX: 0,
+  dateOffsetY: 0,
+  payeeOffsetX: 0,
+  payeeOffsetY: 0,
+  wordsOffsetX: 0,
+  wordsOffsetY: 0,
+  amountOffsetX: 0,
+  amountOffsetY: 0,
 };
+
+export const DEFAULT_PRINT_SETTINGS: ChequePrintSettings = INITIAL_CHEQUE_PRINT_SETTINGS;
+
+export const INITIAL_BENEFICIARY_CATEGORIES: BeneficiaryCategory[] = [
+  { id: 'vendor', name: 'موردين وشركات تجارية', color: 'blue', description: 'الموردين وتجار الجملة والتوريدات' },
+  { id: 'company', name: 'شركات ومؤسسات شقيقة', color: 'purple', description: 'المؤسسات والشركات التابعة أو الشقيقة' },
+  { id: 'employee', name: 'موظفين ومستحقات عمالية', color: 'emerald', description: 'رواتب، مكافآت، مستحقات نهاية خدمة' },
+  { id: 'government', name: 'جهات ومؤسسات حكومية', color: 'amber', description: 'التأمينات، وزارة المالية، الشؤون والبلدية' },
+  { id: 'individual', name: 'أفراد وملاك عقارات', color: 'slate', description: 'إيجارات العقارات، ملاك المنشآت، أفراد' },
+];
 
 export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
   {

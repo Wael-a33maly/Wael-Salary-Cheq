@@ -11,7 +11,8 @@ import {
   RotateCcw,
   Landmark,
   Eye,
-  Plus
+  Plus,
+  FileText
 } from 'lucide-react';
 import { IssuedCheque, BankAccount, Beneficiary } from '../../types';
 
@@ -22,6 +23,7 @@ interface ChequesLedgerProps {
   selectedAccountId: string;
   onSelectAccount: (accId: string) => void;
   onPrintCheque: (cheque: IssuedCheque) => void;
+  onPrintReceiptOrEnvelope?: (cheque: IssuedCheque) => void;
   onStatusChange: (chequeId: string, newStatus: 'issued' | 'cashed' | 'cancelled', notes?: string) => void;
   onNavigateToIssue: () => void;
   initialFilterStatus?: 'all' | 'issued' | 'cashed' | 'cancelled';
@@ -34,6 +36,7 @@ export function ChequesLedger({
   selectedAccountId,
   onSelectAccount,
   onPrintCheque,
+  onPrintReceiptOrEnvelope,
   onStatusChange,
   onNavigateToIssue,
   initialFilterStatus = 'all',
@@ -336,8 +339,20 @@ export function ChequesLedger({
                             title="معاينة وطباعة الشيك"
                           >
                             <Printer className="w-3.5 h-3.5" />
-                            <span>طباعة</span>
+                            <span>شيك</span>
                           </button>
+
+                          {onPrintReceiptOrEnvelope && (
+                            <button
+                              type="button"
+                              onClick={() => onPrintReceiptOrEnvelope(c)}
+                              className="flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-[11px] transition"
+                              title="طباعة سند الصرف أو مظروف الشيك للمستفيد"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-amber-600" />
+                              <span>سند/ظرف</span>
+                            </button>
+                          )}
 
                           {c.status === 'issued' && (
                             <>
