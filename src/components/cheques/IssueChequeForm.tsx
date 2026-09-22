@@ -63,11 +63,8 @@ export function IssueChequeForm({
   const [tafqeetLang, setTafqeetLang] = useState<'ar' | 'en'>('ar');
   const [amountInWords, setAmountInWords] = useState<string>(tafqeetKwd(1000.000));
   const [isManualWords, setIsManualWords] = useState<boolean>(false);
-  const [showRealImagePreview, setShowRealImagePreview] = useState<boolean>(false);
   const [issueDate, setIssueDate] = useState<string>(todayStr);
   const [dueDate, setDueDate] = useState<string>(todayStr);
-  const [isCrossed, setIsCrossed] = useState<boolean>(false); // غير مطلوب طباعتها لأنها مطبوعة مسبقاً
-  const [bearerCrossed, setBearerCrossed] = useState<boolean>(printSettings.defaultBearerCrossing ?? true);
   const [purpose, setPurpose] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [saveAsBeneficiary, setSaveAsBeneficiary] = useState<boolean>(false);
@@ -143,8 +140,8 @@ export function IssueChequeForm({
       issueDate,
       dueDate,
       status: 'issued',
-      isCrossed: false, // لا تطبع جملة Account Payee Only بخطين
-      bearerCrossed,
+      isCrossed: false,
+      bearerCrossed: false,
       purpose: purpose.trim(),
       notes: notes.trim(),
       createdBy: 'admin',
@@ -436,35 +433,6 @@ export function IssueChequeForm({
               </div>
             </div>
 
-            {/* Cheque Flags: Crossing & Bearer Crossing */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <label className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 cursor-pointer hover:bg-slate-100 transition">
-                <input
-                  type="checkbox"
-                  checked={isCrossed}
-                  onChange={(e) => setIsCrossed(e.target.checked)}
-                  className="rounded text-blue-600"
-                />
-                <div>
-                  <span className="font-bold text-slate-800 block">تسطير الشيك (//)</span>
-                  <span className="text-[10px] text-slate-500">للمستفيد الأول فقط (A/C Payee)</span>
-                </div>
-              </label>
-
-              <label className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 cursor-pointer hover:bg-slate-100 transition">
-                <input
-                  type="checkbox"
-                  checked={bearerCrossed}
-                  onChange={(e) => setBearerCrossed(e.target.checked)}
-                  className="rounded text-blue-600"
-                />
-                <div>
-                  <span className="font-bold text-slate-800 block">شطب عبارة "أو لحامله"</span>
-                  <span className="text-[10px] text-slate-500">يصرف فقط للاسم المدون</span>
-                </div>
-              </label>
-            </div>
-
             {/* Purpose / البيان */}
             <div>
               <label className="block text-slate-700 font-bold mb-1">
@@ -487,7 +455,7 @@ export function IssueChequeForm({
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-md transition"
               >
                 <Printer className="w-4 h-4" />
-                <span>حفظ ومعاينة الطباعة</span>
+                <span>حفظ ومعاينة الطباعة المباشرة</span>
               </button>
 
               <button
@@ -512,129 +480,117 @@ export function IssueChequeForm({
             </div>
             
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowRealImagePreview(!showRealImagePreview)}
-                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition border flex items-center gap-1 ${
-                  showRealImagePreview
-                    ? 'bg-emerald-600 text-white border-emerald-500'
-                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
-                }`}
-                title="إظهار صورة الشيك الفعلي المقصوصة كخلفية"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                <span>صورة الشيك الفعلية</span>
-              </button>
-              <span className="text-[10px] font-mono text-emerald-400 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                178mm × 82mm
+              <span className="text-[10px] font-mono text-emerald-400 font-bold bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                180mm × 90mm (18cm × 9cm)
               </span>
             </div>
           </div>
 
-          {/* Cheque Graphic with Exact 178mm x 82mm Aspect Ratio */}
+          {/* Cheque Graphic with Exact 180mm x 90mm (2:1) Aspect Ratio */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto flex justify-center items-center">
             
             <div 
-              className="w-[580px] h-[268px] relative rounded-xl shadow-md p-3 select-none flex flex-col justify-between overflow-hidden border border-emerald-800/30"
-              style={
-                showRealImagePreview
-                  ? {
-                      backgroundImage: `url('/cbk_cheque_template.jpg')`,
-                      backgroundSize: '100% 100%',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat',
-                    }
-                  : {
-                      backgroundColor: '#f4faf7',
-                    }
-              }
+              className="w-[576px] h-[288px] relative rounded-xl shadow-md p-4 select-none flex flex-col justify-between overflow-hidden border border-emerald-800/30 bg-[#f4faf7]"
             >
-              
-              {/* If real image is toggled off, show the vector representation */}
-              {!showRealImagePreview && (
-                <>
-                  <div 
-                    className="absolute inset-0 pointer-events-none opacity-20"
-                    style={{
-                      backgroundImage: `radial-gradient(#00875A 0.75px, transparent 0.75px), radial-gradient(#00875A 0.75px, #f4faf7 0.75px)`,
-                      backgroundSize: '10px 10px',
-                      backgroundPosition: '0 0, 5px 5px',
-                    }}
-                  />
-                  <div className="flex justify-end items-start pl-8">
-                    <div className="flex items-center gap-1.5 text-right">
-                      <div>
-                        <div className="flex items-center justify-end gap-1 leading-none">
-                          <span className="text-[10px] font-bold font-sans text-[#00875A]">Al-Tijari</span>
-                          <span className="text-sm font-black font-serif text-[#00875A]">التجاري</span>
-                        </div>
-                        <div className="text-[6.5px] font-bold text-[#00875A]/90 mt-0.5">
-                          البنك التجاري الكويتي (ش.م.ك.ع)
-                        </div>
-                      </div>
-                      <svg viewBox="0 0 100 100" className="w-6 h-6 text-[#00875A]" fill="currentColor">
-                        <path d="M50 0 L58 35 L95 20 L68 50 L95 80 L58 65 L50 100 L42 65 L5 80 L32 50 L5 20 L42 35 Z" />
-                      </svg>
+              {/* Vector Watermark & Security Background */}
+              <div 
+                className="absolute inset-0 pointer-events-none opacity-20"
+                style={{
+                  backgroundImage: `radial-gradient(#00875A 0.75px, transparent 0.75px), radial-gradient(#00875A 0.75px, #f4faf7 0.75px)`,
+                  backgroundSize: '10px 10px',
+                  backgroundPosition: '0 0, 5px 5px',
+                }}
+              />
+
+              {/* Bank Header (CBK Al-Tijari) */}
+              <div className="flex justify-between items-start z-10">
+                <div className="text-[8px] font-mono text-[#00875A]/70">
+                  <span>CHEQUE NO: </span>
+                  <span className="font-bold">{String(chequeSerial).padStart(8, '0')}</span>
+                </div>
+
+                <div className="flex items-center gap-2 text-right">
+                  <div>
+                    <div className="flex items-center justify-end gap-1.5 leading-none">
+                      <span className="text-[11px] font-bold font-sans text-[#00875A]">Al-Tijari</span>
+                      <span className="text-base font-black font-serif text-[#00875A]">التجاري</span>
+                    </div>
+                    <div className="text-[7.5px] font-bold text-[#00875A]/90 mt-0.5">
+                      البنك التجاري الكويتي (ش.م.ك.ع)
                     </div>
                   </div>
-                </>
-              )}
+                  <svg viewBox="0 0 100 100" className="w-7 h-7 text-[#00875A]" fill="currentColor">
+                    <path d="M50 0 L58 35 L95 20 L68 50 L95 80 L58 65 L50 100 L42 65 L5 80 L32 50 L5 20 L42 35 Z" />
+                  </svg>
+                </div>
+              </div>
 
               {/* 1. Date Field (التاريخ) */}
               <div 
-                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-[11.5px] tracking-wider"
+                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-xs tracking-wider"
                 style={{
-                  right: '34px',
-                  top: '84px',
-                  width: '120px',
+                  right: '36px',
+                  top: '60px',
+                  width: '130px',
                 }}
               >
-                <span className="bg-white/70 px-1.5 py-0.5 rounded shadow-2xs border border-slate-300">
-                  {dayStr}/{monthStr}/{yearStr}
-                </span>
+                <div className="text-right w-full">
+                  <span className="text-[8px] text-slate-400 block mb-0.5 font-sans">التاريخ / Date:</span>
+                  <span className="bg-white/80 px-2 py-0.5 rounded border border-slate-300 shadow-2xs font-bold font-mono">
+                    {dayStr}/{monthStr}/{yearStr}
+                  </span>
+                </div>
               </div>
 
               {/* 2. Beneficiary Field (إدفعوا لأمر) */}
               <div 
-                className="absolute flex items-center font-serif font-black text-slate-950 text-[13px] px-1 truncate"
+                className="absolute flex flex-col font-serif font-black text-slate-950 text-sm px-1 truncate"
                 style={{
-                  left: '110px',
-                  top: '112px',
-                  width: '360px',
+                  left: '70px',
+                  top: '106px',
+                  width: '400px',
                 }}
               >
-                <span className="bg-white/80 px-2 py-0.5 rounded shadow-2xs border border-slate-300/80 truncate block w-full text-right">
+                <span className="text-[8px] text-slate-400 font-sans block mb-0.5 text-right">ادفعوا لأمر / Pay to the order of:</span>
+                <span className="bg-white/85 px-2.5 py-1 rounded shadow-2xs border border-slate-300/80 truncate block w-full text-right font-bold text-slate-900">
                   {beneficiaryName || '...................................................'}
                 </span>
               </div>
 
               {/* 3. Amount in Words / Tafqeet (دينار كويتي) */}
               <div 
-                className="absolute flex items-center font-sans font-bold text-slate-900 text-[11px] leading-tight px-1"
+                className="absolute flex flex-col font-sans font-bold text-slate-900 text-xs leading-tight px-1"
                 style={{
-                  left: '110px',
-                  top: '146px',
-                  width: '260px',
+                  left: '70px',
+                  top: '154px',
+                  width: '320px',
                 }}
               >
-                <span className="bg-white/80 px-2 py-0.5 rounded shadow-2xs border border-slate-300/80 truncate block w-full">
+                <span className="text-[8px] text-slate-400 block mb-0.5 text-right">مبلغ وقدره / The Sum of:</span>
+                <span className="bg-white/85 px-2.5 py-1 rounded shadow-2xs border border-slate-300/80 truncate block w-full text-slate-900 font-serif font-bold text-[11px]">
                   {amountInWords || '...................................................'}
                 </span>
               </div>
 
               {/* 4. Amount in Digits with single # at both ends (KD Box) */}
               <div 
-                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-[13.5px] tracking-wider"
+                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-sm tracking-wider"
                 style={{
-                  right: '30px',
-                  top: '144px',
+                  right: '36px',
+                  top: '150px',
                   width: '140px',
-                  height: '34px',
+                  height: '42px',
                 }}
               >
-                <span className="bg-white px-3 py-1 rounded shadow-xs border-2 border-[#00875A] font-black">
+                <span className="bg-white px-3 py-1.5 rounded-lg shadow-xs border-2 border-[#00875A] font-black text-[#00875A] text-base">
                   #{amount.toFixed(3)}#
                 </span>
+              </div>
+
+              {/* Cheque Bottom Security Line / MICR */}
+              <div className="pt-2 flex justify-between items-center text-[9px] font-mono text-slate-600 border-t border-[#00875A]/30 z-10">
+                <span className="tracking-widest">⑈{String(chequeSerial).padStart(8, '0')}⑈ 019⑉ 00123456789⑈ 01</span>
+                <span className="text-[8px] text-[#00875A]/70 font-sans">معتمد رسمي - البنك التجاري الكويتي</span>
               </div>
 
             </div>
@@ -645,10 +601,10 @@ export function IssueChequeForm({
           <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl text-xs text-emerald-950 space-y-1">
             <div className="font-bold flex items-center gap-1.5 text-emerald-900">
               <AlertCircle className="w-4 h-4 text-emerald-600" />
-              <span>ملاحظات الإصدار والطباعة وفق المقاسات المعتمدة:</span>
+              <span>ملاحظات الإصدار والطباعة المعتمدة:</span>
             </div>
             <p className="text-[11px] text-emerald-800 leading-relaxed">
-              تمت معايرة تصميم شيك البنك التجاري الكويتي (CBK) وفق الأبعاد الرسمية (178mm × 82mm) مع دعم التفقيط بالعربية والإنجليزية وخيارات الطباعة على الورق الفعلي أو ورقة A4.
+              تمت معايرة تصميم شيك البنك التجاري الكويتي (CBK) وفق الأبعاد المعتمدة 180mm × 90mm (عرض 18 سم وارتفاع 9 سم) مع التفقيط التلقائي الدقيق بالدينار الكويتي وخيارات الطباعة المباشرة على ورقة الشيك.
             </p>
           </div>
         </div>

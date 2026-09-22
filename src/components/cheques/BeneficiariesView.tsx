@@ -79,6 +79,25 @@ export function BeneficiariesView({
   const [editingCatName, setEditingCatName] = useState('');
   const [editingCatColor, setEditingCatColor] = useState('blue');
 
+  // إضافة تصنيف سريع ومباشر داخل نموذج المستفيد بدون تداخل نوافذ
+  const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
+  const [inlineCatName, setInlineCatName] = useState('');
+  const [inlineCatColor, setInlineCatColor] = useState('blue');
+
+  const handleSaveInlineCategory = () => {
+    if (!inlineCatName.trim()) return;
+    const newCategory: BeneficiaryCategory = {
+      id: `cat_${Date.now()}`,
+      name: inlineCatName.trim(),
+      color: inlineCatColor,
+      isCustom: true,
+    };
+    setCategories((prev) => [...prev, newCategory]);
+    setFormData((prev) => ({ ...prev, category: newCategory.id }));
+    setInlineCatName('');
+    setShowInlineAddCategory(false);
+  };
+
   // Form State
   const [formData, setFormData] = useState({
     nameAr: '',
@@ -521,10 +540,10 @@ export function BeneficiariesView({
                     <label className="block text-slate-700 font-bold">التصنيف:</label>
                     <button
                       type="button"
-                      onClick={() => setIsCategoryModalOpen(true)}
+                      onClick={() => setShowInlineAddCategory(!showInlineAddCategory)}
                       className="text-[10px] text-blue-600 hover:underline font-bold"
                     >
-                      + تصنيف جديد
+                      {showInlineAddCategory ? 'إلغاء' : '+ تصنيف جديد مباشر'}
                     </button>
                   </div>
                   <select
@@ -538,6 +557,65 @@ export function BeneficiariesView({
                       </option>
                     ))}
                   </select>
+
+                  {/* نموذج إضافة التصنيف المباشر داخل الفورم بدون نوافذ متداخلة */}
+                  {showInlineAddCategory && (
+                    <div className="mt-2 p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2 text-right">
+                      <div className="text-[10.5px] font-bold text-blue-900">إضافة تصنيف فوري للمستفيد:</div>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="اسم التصنيف الجديد..."
+                          value={inlineCatName}
+                          onChange={(e) => setInlineCatName(e.target.value)}
+                          className="flex-1 p-1.5 text-xs bg-white border border-blue-300 rounded-lg font-bold"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveInlineCategory();
+                            }
+                          }}
+                        />
+                        <select
+                          value={inlineCatColor}
+                          onChange={(e) => setInlineCatColor(e.target.value)}
+                          className="p-1.5 text-xs bg-white border border-blue-300 rounded-lg text-slate-700"
+                        >
+                          <option value="blue">أزرق</option>
+                          <option value="emerald">أخضر</option>
+                          <option value="purple">بنفسجي</option>
+                          <option value="amber">كهرماني</option>
+                          <option value="rose">وردي</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsCategoryModalOpen(true)}
+                          className="text-[10px] text-slate-500 hover:text-blue-600 underline"
+                        >
+                          إدارة كافة التصنيفات
+                        </button>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setShowInlineAddCategory(false)}
+                            className="px-2 py-1 text-[11px] text-slate-600 hover:text-slate-900"
+                          >
+                            إلغاء
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveInlineCategory}
+                            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs shadow-xs"
+                          >
+                            + إضافة واعتماد
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -642,7 +720,10 @@ export function BeneficiariesView({
       {/* نافذة إدارة تصنيفات المستفيدين (تظهر دائماً بالأعلى z-[70] فوق أي نموذج) */}
       {/* ========================================================================= */}
       {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-[70] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4"
+          style={{ zIndex: 99999 }}
+        >
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 text-right">
             
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">

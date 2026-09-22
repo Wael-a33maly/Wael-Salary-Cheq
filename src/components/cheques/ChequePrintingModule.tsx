@@ -30,6 +30,7 @@ import { ChequesLedger } from './ChequesLedger';
 import { BeneficiariesView } from './BeneficiariesView';
 import { ChequeReportsView } from './ChequeReportsView';
 import { ChequeBooksSettings } from './ChequeBooksSettings';
+import { ChequeCalibrationTab } from './ChequeCalibrationTab';
 import { CbkChequePrint } from './CbkChequePrint';
 import { ChequeReceiptAndEnvelopeModal } from './ChequeReceiptAndEnvelopeModal';
 
@@ -224,6 +225,7 @@ export function ChequePrintingModule({
     { id: 'ledger', label: 'سجل الشيكات والمتابعة', icon: ListOrdered },
     { id: 'beneficiaries', label: 'شاشة تسجيل المستفيدين', icon: Users },
     { id: 'reports', label: 'مركز التقارير المصرفية', icon: FileSpreadsheet },
+    { id: 'calibration', label: 'معايرة مقاسات الشيك', icon: Sliders },
     { id: 'settings', label: 'دفاتر الشيكات والحسابات', icon: BookOpen },
   ];
 
@@ -368,6 +370,13 @@ export function ChequePrintingModule({
         />
       )}
 
+      {currentSubTab === 'calibration' && (
+        <ChequeCalibrationTab
+          printSettings={printSettings}
+          onUpdatePrintSettings={handleUpdatePrintSettings}
+        />
+      )}
+
       {currentSubTab === 'settings' && (
         <ChequeBooksSettings
           bankAccounts={bankAccounts}
@@ -378,6 +387,7 @@ export function ChequePrintingModule({
           onAddChequeBook={handleAddChequeBook}
           onUpdateChequeBook={handleUpdateChequeBook}
           onUpdatePrintSettings={handleUpdatePrintSettings}
+          onNavigateToCalibration={() => setCurrentSubTab('calibration')}
         />
       )}
 
@@ -391,7 +401,10 @@ export function ChequePrintingModule({
           printSettings={printSettings}
           companyName={companyName}
           onClose={() => setPrintingCheque(null)}
-          onUpdatePrintSettings={handleUpdatePrintSettings}
+          onNavigateToCalibration={() => {
+            setPrintingCheque(null);
+            setCurrentSubTab('calibration');
+          }}
         />
       )}
 

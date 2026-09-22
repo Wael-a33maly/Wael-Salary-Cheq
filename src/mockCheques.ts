@@ -9,15 +9,27 @@ export const INITIAL_CHEQUE_PRINT_SETTINGS: ChequePrintSettings = {
   defaultBearerCrossing: true,
   defaultPrinterName: 'HP LaserJet Pro M404n (درج الشيكات المخصص)',
   chequeDueDateAlertDays: 7,
-  templateMode: 'vector_template', // التصميم الأصلي المتجهي لشيك البنك التجاري
+  templateMode: 'scanned_image', // صورة الشيك الحقيقية الأصلية
   dateOffsetX: 0,
   dateOffsetY: 0,
+  dateWidth: 36,
+  dateHeight: 8.5,
+  dateFontSize: 12,
   payeeOffsetX: 0,
   payeeOffsetY: 0,
+  payeeWidth: 120,
+  payeeHeight: 8.5,
+  payeeFontSize: 13,
   wordsOffsetX: 0,
   wordsOffsetY: 0,
+  wordsWidth: 84,
+  wordsHeight: 9.5,
+  wordsFontSize: 11,
   amountOffsetX: 0,
   amountOffsetY: 0,
+  amountWidth: 42,
+  amountHeight: 12.5,
+  amountFontSize: 14,
 };
 
 export const DEFAULT_PRINT_SETTINGS: ChequePrintSettings = INITIAL_CHEQUE_PRINT_SETTINGS;

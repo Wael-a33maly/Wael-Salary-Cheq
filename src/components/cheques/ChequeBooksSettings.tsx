@@ -21,6 +21,7 @@ interface ChequeBooksSettingsProps {
   onAddChequeBook: (book: Omit<ChequeBook, 'id'>) => void;
   onUpdateChequeBook: (book: ChequeBook) => void;
   onUpdatePrintSettings: (settings: ChequePrintSettings) => void;
+  onNavigateToCalibration?: () => void;
 }
 
 export function ChequeBooksSettings({
@@ -32,6 +33,7 @@ export function ChequeBooksSettings({
   onAddChequeBook,
   onUpdateChequeBook,
   onUpdatePrintSettings,
+  onNavigateToCalibration,
 }: ChequeBooksSettingsProps) {
   // Modal states
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -311,166 +313,51 @@ export function ChequeBooksSettings({
             </div>
           </div>
 
-          {/* Printer Calibration Settings */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Sliders className="w-4 h-4 text-amber-600" />
-              <span>إعدادات معايرة طباعة الشيكات الافتراضية</span>
-            </h3>
-
-            <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="font-bold text-slate-800 block mb-2">إزاحة الشيك ككل (Global Offset):</span>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">
-                      الإزاحة الأفقية X (mm):
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.offsetX}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, offsetX: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">
-                      الإزاحة الرأسية Y (mm):
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.offsetY}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, offsetY: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold bg-white"
-                    />
-                  </div>
-                </div>
+          {/* Dedicated Calibration Tab Card */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 p-5 rounded-2xl border border-amber-200/80 shadow-xs space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-amber-200/60 pb-3">
+              <div className="p-2 rounded-xl bg-amber-600 text-white">
+                <Sliders className="w-5 h-5" />
               </div>
-
-              {/* ضبط الحقول المنفردة */}
-              <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200 space-y-3">
-                <span className="font-bold text-emerald-900 block">معايرة كل حقل منفرداً (أعلى/أسفل/يمين/يسار):</span>
-                
-                {/* التاريخ */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل التاريخ X (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.dateOffsetX || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, dateOffsetX: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل التاريخ Y (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.dateOffsetY || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, dateOffsetY: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* المستفيد */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل المستفيد X (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.payeeOffsetX || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, payeeOffsetX: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل المستفيد Y (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.payeeOffsetY || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, payeeOffsetY: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* التفقيط */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل التفقيط X (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.wordsOffsetX || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, wordsOffsetX: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل التفقيط Y (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.wordsOffsetY || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, wordsOffsetY: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* المبلغ بالأرقام */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل المبلغ بالأرقام X (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.amountOffsetX || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, amountOffsetX: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-medium mb-1">حقل المبلغ بالأرقام Y (mm):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={settingsForm.amountOffsetY || 0}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, amountOffsetY: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-1.5 border border-slate-300 rounded-lg font-mono bg-white"
-                    />
-                  </div>
-                </div>
+              <div>
+                <h3 className="font-black text-slate-900 text-sm">
+                  معايرة مقاسات الشيك (18cm × 9cm)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  سحب وإفلات تفاعلي مع لوحة توجيه بالأسهم لكافة الحقول
+                </p>
               </div>
+            </div>
 
-              <div className="space-y-2 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settingsForm.defaultBearerCrossing}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, defaultBearerCrossing: e.target.checked })}
-                    className="rounded text-emerald-600"
-                  />
-                  <span className="text-slate-700 font-bold">شطب عبارة "أو لحامله" تلقائياً</span>
-                </label>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              تم تخصيص تبويب مستقل في القائمة الجانبية لمعايرة أبعاد الشيك المعتمد (18 سم عرض × 9 سم ارتفاع) ومواضع الحقول (التاريخ، اسم المستفيد، التفقيط، والمبلغ) بنظام السحب والإفلات المباشر والأسهم في كل الاتجاهات.
+            </p>
+
+            <div className="bg-white/80 p-3 rounded-xl border border-amber-200/60 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-600">
+                <span>أبعاد ورقة الشيك:</span>
+                <strong className="font-mono text-slate-900">180mm × 90mm</strong>
               </div>
+              <div className="flex justify-between text-slate-600">
+                <span>الإزاحة الأفقية العامة X:</span>
+                <strong className="font-mono text-slate-900">{printSettings.offsetX || 0} مم</strong>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>الإزاحة الرأسية العامة Y:</span>
+                <strong className="font-mono text-slate-900">{printSettings.offsetY || 0} مم</strong>
+              </div>
+            </div>
 
+            {onNavigateToCalibration && (
               <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md transition mt-2"
+                type="button"
+                onClick={onNavigateToCalibration}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-xl text-xs shadow-md transition transform active:scale-98"
               >
-                <Save className="w-4 h-4" />
-                <span>حفظ إعدادات المعايرة</span>
+                <Sliders className="w-4 h-4" />
+                <span>فتح شاشة معايرة مقاسات الشيك</span>
               </button>
-            </form>
+            )}
           </div>
 
         </div>

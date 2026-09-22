@@ -8,7 +8,8 @@ import {
   FileText,
   Landmark,
   Calendar,
-  ArrowUpRight
+  ArrowUpRight,
+  LayoutDashboard
 } from 'lucide-react';
 import { IssuedCheque } from '../types';
 
@@ -90,18 +91,35 @@ export function AppHeader({
           </div>
 
           {/* Left: Quick Actions & Notifications */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             
+            {/* Quick action: لوحة التحكم (إذا كان خارج الداشبورد) */}
+            {activeTab !== 'dashboard' && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+                title="الرجوع للوحة التحكم الرئيسية"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5 text-blue-400" />
+                <span className="hidden md:inline">لوحة التحكم</span>
+              </button>
+            )}
+
             {/* Quick action: مسير الرواتب (مخفي تماماً عند فتح تبويب الشيكات بناءً على طلب المستخدم) */}
             {activeTab !== 'cheques' && (
               <button
                 type="button"
                 onClick={() => setActiveTab('payroll')}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                  activeTab === 'payroll'
+                    ? 'bg-blue-600/30 text-blue-300 border-blue-500'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
+                }`}
                 title="مسير الرواتب"
               >
                 <Calculator className="w-3.5 h-3.5 text-blue-400" />
-                <span>مسير الرواتب</span>
+                <span className="hidden sm:inline">مسير الرواتب</span>
               </button>
             )}
 
@@ -114,26 +132,33 @@ export function AppHeader({
                   onNavigateToCheques('dashboard');
                 }
               }}
-              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
                 activeTab === 'cheques'
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-xs'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
               }`}
-              title="طباعة وإدارة الشيكات المصرفية"
+              title="طباعة وإدارة الشيكات المصرفية (CBK)"
             >
               <Landmark className="w-3.5 h-3.5 text-amber-400" />
-              <span>الشيكات المصرفية</span>
+              <span className="hidden sm:inline">الشيكات المصرفية</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('receipts')}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
-              title="طباعة إيصالات الصرف والأظرف"
-            >
-              <Printer className="w-3.5 h-3.5 text-emerald-400" />
-              <span>طباعة الإيصالات والأظرف</span>
-            </button>
+            {/* Quick action: طباعة الإيصالات والأظرف */}
+            {activeTab !== 'cheques' && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('receipts')}
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                  activeTab === 'receipts'
+                    ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
+                }`}
+                title="طباعة إيصالات الصرف والأظرف"
+              >
+                <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">الإيصالات والأظرف</span>
+              </button>
+            )}
 
             {/* Unified Alerts Bell: Residency + Upcoming Cheques */}
             <div className="relative">

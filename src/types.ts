@@ -114,6 +114,20 @@ export interface ChequePrintSettings {
   wordsOffsetY?: number;
   amountOffsetX?: number;
   amountOffsetY?: number;
+  // أبعاد الحقول بالملليمتر (العرض والارتفاع)
+  dateWidth?: number;
+  dateHeight?: number;
+  payeeWidth?: number;
+  payeeHeight?: number;
+  wordsWidth?: number;
+  wordsHeight?: number;
+  amountWidth?: number;
+  amountHeight?: number;
+  // أحجام خطوط الطباعة
+  dateFontSize?: number;
+  payeeFontSize?: number;
+  wordsFontSize?: number;
+  amountFontSize?: number;
 }
 
 export interface BeneficiaryCategory {
@@ -122,6 +136,7 @@ export interface BeneficiaryCategory {
   color?: string;
   description?: string;
   isDefault?: boolean;
+  isCustom?: boolean;
 }
 
 export interface BankAccount {

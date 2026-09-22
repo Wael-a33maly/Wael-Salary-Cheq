@@ -434,7 +434,7 @@ export default function App() {
         </main>
 
         {/* App Footer */}
-        <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-600 print:hidden">
+        <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-600 print:hidden mt-auto">
           <div className="max-w-7xl mx-auto px-4 flex items-center justify-center">
             <span className="font-sans font-bold">
               &copy; 2025 A33maly - جميع الحقوق محفوظة

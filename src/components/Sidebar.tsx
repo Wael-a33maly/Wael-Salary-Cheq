@@ -24,7 +24,8 @@ import {
   Receipt,
   ListOrdered,
   FileSpreadsheet,
-  BookOpen
+  BookOpen,
+  Sliders
 } from 'lucide-react';
 
 export const REPORTS_SUB_ITEMS = [
@@ -66,20 +67,14 @@ export function Sidebar({
   onSelectChequeSubTab,
   onLogout,
 }: SidebarProps) {
-  // State for collapsible payroll tab / section
-  const [payrollSectionOpen, setPayrollSectionOpen] = useState(true);
-  // State for collapsible reports sub-menu
-  const [reportsOpen, setReportsOpen] = useState(true);
-  // State for collapsible cheques section
-  const [chequesSectionOpen, setChequesSectionOpen] = useState(true);
+  // Accordion state: only one section open at a time ('cheques' | 'payroll' | null)
+  const [expandedSection, setExpandedSection] = useState<'cheques' | 'payroll' | null>(() => {
+    if (activeTab === 'cheques') return 'cheques';
+    return 'payroll';
+  });
 
-  // Close sidebar on mobile when navigating
-  const handleNavClick = (tabId: string) => {
-    setActiveTab(tabId);
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setIsCollapsed(true);
-    }
-  };
+  // State for collapsible reports sub-menu inside payroll
+  const [reportsOpen, setReportsOpen] = useState(false);
 
   // Sub-items belonging to the "الرواتب" section
   const payrollSubItems = [
@@ -92,13 +87,6 @@ export function Sidebar({
 
   const isPayrollActive = payrollSubItems.some((item) => item.id === activeTab);
 
-  // Auto expand payroll section if an item inside is active
-  useEffect(() => {
-    if (isPayrollActive) {
-      setPayrollSectionOpen(true);
-    }
-  }, [activeTab, isPayrollActive]);
-
   // Sub-items belonging to the "طباعة الشيكات" section
   const chequeSubItems = [
     { id: 'dashboard', label: 'لوحة التحكم والداشبورد', icon: LayoutDashboard },
@@ -107,16 +95,35 @@ export function Sidebar({
     { id: 'beneficiaries', label: 'شاشة تسجيل المستفيدين', icon: Users },
     { id: 'reports', label: 'مركز التقارير المصرفية', icon: FileSpreadsheet },
     { id: 'settings', label: 'دفاتر الشيكات والحسابات', icon: BookOpen },
+    { id: 'calibration', label: 'معايرة مقاسات الشيك', icon: Sliders, badge: 'جديد' },
   ];
 
   const isChequesActive = activeTab === 'cheques';
 
-  // Auto expand cheques section if active
+  // Handle navigation click with strict accordion behavior (opening one closes others)
+  const handleNavClick = (tabId: string) => {
+    setActiveTab(tabId);
+    if (tabId === 'cheques') {
+      setExpandedSection('cheques');
+    } else if (payrollSubItems.some((item) => item.id === tabId)) {
+      setExpandedSection('payroll');
+    } else {
+      // Standalone top level tabs (dashboard, users, settings) collapse accordion
+      setExpandedSection(null);
+    }
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsCollapsed(true);
+    }
+  };
+
+  // Keep accordion in sync with activeTab changes from external clicks
   useEffect(() => {
     if (isChequesActive) {
-      setChequesSectionOpen(true);
+      setExpandedSection('cheques');
+    } else if (isPayrollActive) {
+      setExpandedSection('payroll');
     }
-  }, [isChequesActive]);
+  }, [activeTab, isChequesActive, isPayrollActive]);
 
   return (
     <>
@@ -195,19 +202,12 @@ export function Sidebar({
               onClick={() => {
                 if (isCollapsed) {
                   setIsCollapsed(false);
-                  setChequesSectionOpen(true);
-                  handleNavClick('cheques');
-                } else {
-                  if (activeTab !== 'cheques') {
-                    handleNavClick('cheques');
-                    setChequesSectionOpen(true);
-                  } else {
-                    setChequesSectionOpen(!chequesSectionOpen);
-                  }
                 }
+                handleNavClick('cheques');
+                setExpandedSection((prev) => (prev === 'cheques' ? null : 'cheques'));
               }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition group ${
-                isChequesActive && !chequesSectionOpen
+                isChequesActive && expandedSection !== 'cheques'
                   ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40'
                   : isChequesActive
                   ? 'bg-amber-950/40 text-amber-200 border border-amber-500/30'
@@ -232,14 +232,14 @@ export function Sidebar({
               {!isCollapsed && (
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                    chequesSectionOpen ? 'rotate-180' : ''
+                    expandedSection === 'cheques' ? 'rotate-180' : ''
                   }`}
                 />
               )}
             </button>
 
             {/* Sub-items list of الشيكات */}
-            {(!isCollapsed ? chequesSectionOpen : isChequesActive) && (
+            {(!isCollapsed ? expandedSection === 'cheques' : isChequesActive) && (
               <div className={`space-y-1 mt-1 ${!isCollapsed ? 'mr-2 pr-2 border-r-2 border-amber-600/50' : ''}`}>
                 {chequeSubItems.map((item) => {
                   const Icon = item.icon;
@@ -298,13 +298,14 @@ export function Sidebar({
               onClick={() => {
                 if (isCollapsed) {
                   setIsCollapsed(false);
-                  setPayrollSectionOpen(true);
-                } else {
-                  setPayrollSectionOpen(!payrollSectionOpen);
                 }
+                if (!isPayrollActive) {
+                  handleNavClick('payroll');
+                }
+                setExpandedSection((prev) => (prev === 'payroll' ? null : 'payroll'));
               }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition group ${
-                isPayrollActive && !payrollSectionOpen
+                isPayrollActive && expandedSection !== 'payroll'
                   ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40'
                   : 'text-slate-200 hover:bg-slate-800/80'
               } ${isCollapsed ? 'justify-center' : ''}`}
@@ -322,14 +323,14 @@ export function Sidebar({
               {!isCollapsed && (
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                    payrollSectionOpen ? 'rotate-180' : ''
+                    expandedSection === 'payroll' ? 'rotate-180' : ''
                   }`}
                 />
               )}
             </button>
 
             {/* Sub-items list of الرواتب */}
-            {(!isCollapsed ? payrollSectionOpen : true) && (
+            {(!isCollapsed ? expandedSection === 'payroll' : true) && (
               <div className={`space-y-1 mt-1 ${!isCollapsed ? 'mr-2 pr-2 border-r-2 border-slate-800' : ''}`}>
                 {payrollSubItems.map((item) => {
                   const Icon = item.icon;
