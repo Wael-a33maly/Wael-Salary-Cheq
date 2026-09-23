@@ -316,6 +316,7 @@ export function ChequePrintingModule({
           selectedAccountId={selectedAccountId}
           onSelectAccount={setSelectedAccountId}
           printSettings={printSettings}
+          onUpdatePrintSettings={handleUpdatePrintSettings}
           onSaveCheque={handleSaveCheque}
           onSaveAndPrint={handleSaveAndPrint}
           onAddNewBeneficiary={handleAddBeneficiary}

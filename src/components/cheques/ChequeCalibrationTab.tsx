@@ -26,10 +26,13 @@ import {
   X,
   CheckCircle2,
   FileCheck,
-  Sparkles
+  Sparkles,
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { ChequePrintSettings } from '../../types';
 import { DEFAULT_PRINT_SETTINGS } from '../../mockCheques';
+import { formatChequeAmount } from '../../utils/tafqeetKwd';
 
 interface ChequeCalibrationTabProps {
   printSettings: ChequePrintSettings;
@@ -37,7 +40,17 @@ interface ChequeCalibrationTabProps {
 }
 
 type SelectedField = 'all' | 'date' | 'payee' | 'words' | 'amount';
-type DragMode = 'move' | 'resize-br' | 'resize-r' | 'resize-b' | null;
+type DragMode = 
+  | 'move' 
+  | 'resize-t' 
+  | 'resize-b' 
+  | 'resize-l' 
+  | 'resize-r' 
+  | 'resize-tl' 
+  | 'resize-tr' 
+  | 'resize-bl' 
+  | 'resize-br' 
+  | null;
 
 // Base coordinates on an official 180mm x 90mm cheque (Width 18cm, Height 9cm)
 // Derived directly from the physical CBK cheque layout (Right-to-Left Arabic orientation)
@@ -301,28 +314,57 @@ export function ChequeCalibrationTab({
           next.offsetX = newX;
           next.offsetY = newY;
         }
-      } else if (dragMode === 'resize-br') {
-        const newW = Math.max(12, Math.round((initW + deltaX_mm) * 10) / 10);
-        const newH = Math.max(4, Math.round((initH + deltaY_mm) * 10) / 10);
+      } else {
+        // Resizing from edges or corners
+        let newW = initW;
+        let newH = initH;
+        let newX = initX;
+        let newY = initY;
 
-        if (draggingField === 'date') { next.dateWidth = newW; next.dateHeight = newH; }
-        else if (draggingField === 'payee') { next.payeeWidth = newW; next.payeeHeight = newH; }
-        else if (draggingField === 'words') { next.wordsWidth = newW; next.wordsHeight = newH; }
-        else if (draggingField === 'amount') { next.amountWidth = newW; next.amountHeight = newH; }
-      } else if (dragMode === 'resize-r') {
-        const newW = Math.max(12, Math.round((initW + deltaX_mm) * 10) / 10);
+        // Width calculations
+        if (dragMode === 'resize-r' || dragMode === 'resize-br' || dragMode === 'resize-tr') {
+          newW = Math.max(10, Math.round((initW + deltaX_mm) * 10) / 10);
+        } else if (dragMode === 'resize-l' || dragMode === 'resize-bl' || dragMode === 'resize-tl') {
+          const calcW = Math.round((initW - deltaX_mm) * 10) / 10;
+          if (calcW >= 10) {
+            newW = calcW;
+            newX = Math.round((initX + deltaX_mm) * 10) / 10;
+          }
+        }
 
-        if (draggingField === 'date') next.dateWidth = newW;
-        else if (draggingField === 'payee') next.payeeWidth = newW;
-        else if (draggingField === 'words') next.wordsWidth = newW;
-        else if (draggingField === 'amount') next.amountWidth = newW;
-      } else if (dragMode === 'resize-b') {
-        const newH = Math.max(4, Math.round((initH + deltaY_mm) * 10) / 10);
+        // Height calculations
+        if (dragMode === 'resize-b' || dragMode === 'resize-br' || dragMode === 'resize-bl') {
+          newH = Math.max(4, Math.round((initH + deltaY_mm) * 10) / 10);
+        } else if (dragMode === 'resize-t' || dragMode === 'resize-tr' || dragMode === 'resize-tl') {
+          const calcH = Math.round((initH - deltaY_mm) * 10) / 10;
+          if (calcH >= 4) {
+            newH = calcH;
+            newY = Math.round((initY + deltaY_mm) * 10) / 10;
+          }
+        }
 
-        if (draggingField === 'date') next.dateHeight = newH;
-        else if (draggingField === 'payee') next.payeeHeight = newH;
-        else if (draggingField === 'words') next.wordsHeight = newH;
-        else if (draggingField === 'amount') next.amountHeight = newH;
+        // Apply to targeted field
+        if (draggingField === 'date') {
+          next.dateWidth = newW;
+          next.dateHeight = newH;
+          next.dateOffsetX = newX;
+          next.dateOffsetY = newY;
+        } else if (draggingField === 'payee') {
+          next.payeeWidth = newW;
+          next.payeeHeight = newH;
+          next.payeeOffsetX = newX;
+          next.payeeOffsetY = newY;
+        } else if (draggingField === 'words') {
+          next.wordsWidth = newW;
+          next.wordsHeight = newH;
+          next.wordsOffsetX = newX;
+          next.wordsOffsetY = newY;
+        } else if (draggingField === 'amount') {
+          next.amountWidth = newW;
+          next.amountHeight = newH;
+          next.amountOffsetX = newX;
+          next.amountOffsetY = newY;
+        }
       }
 
       return next;
@@ -339,6 +381,78 @@ export function ChequeCalibrationTab({
         // Safe ignore
       }
     }
+  };
+
+  // Helper to render edge and corner resize handles for direct resizing from all sides
+  const renderResizeHandles = (field: SelectedField, accentClass: string) => {
+    if (selectedField !== field) return null;
+    return (
+      <>
+        {/* 1. Top Edge Handle (اسحب الحافة العلوية) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-t', e)}
+          className="absolute -top-1.5 left-2 right-2 h-3.5 cursor-ns-resize z-30 flex items-center justify-center group"
+          title="اسحب الحافة العلوية لتغيير الارتفاع"
+        >
+          <div className={`w-8 h-1 rounded-full ${accentClass} opacity-80 group-hover:opacity-100 group-hover:h-1.5 transition-all shadow-xs`} />
+        </div>
+
+        {/* 2. Bottom Edge Handle (اسحب الحافة السفلية) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-b', e)}
+          className="absolute -bottom-1.5 left-2 right-2 h-3.5 cursor-ns-resize z-30 flex items-center justify-center group"
+          title="اسحب الحافة السفلية لتغيير الارتفاع"
+        >
+          <div className={`w-8 h-1 rounded-full ${accentClass} opacity-80 group-hover:opacity-100 group-hover:h-1.5 transition-all shadow-xs`} />
+        </div>
+
+        {/* 3. Left Edge Handle (اسحب الحافة اليسرى) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-l', e)}
+          className="absolute top-2 bottom-2 -left-1.5 w-3.5 cursor-ew-resize z-30 flex items-center justify-center group"
+          title="اسحب الحافة اليسرى لتغيير العرض"
+        >
+          <div className={`h-6 w-1 rounded-full ${accentClass} opacity-80 group-hover:opacity-100 group-hover:w-1.5 transition-all shadow-xs`} />
+        </div>
+
+        {/* 4. Right Edge Handle (اسحب الحافة اليمنى) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-r', e)}
+          className="absolute top-2 bottom-2 -right-1.5 w-3.5 cursor-ew-resize z-30 flex items-center justify-center group"
+          title="اسحب الحافة اليمنى لتغيير العرض"
+        >
+          <div className={`h-6 w-1 rounded-full ${accentClass} opacity-80 group-hover:opacity-100 group-hover:w-1.5 transition-all shadow-xs`} />
+        </div>
+
+        {/* 5. Top-Left Corner (الزاوية العلوية اليسرى) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-tl', e)}
+          className={`absolute -top-1.5 -left-1.5 w-3.5 h-3.5 ${accentClass} border-2 border-white rounded-xs cursor-nwse-resize z-35 shadow-xs`}
+          title="اسحب الزاوية لتعديل الأبعاد"
+        />
+
+        {/* 6. Top-Right Corner (الزاوية العلوية اليمنى) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-tr', e)}
+          className={`absolute -top-1.5 -right-1.5 w-3.5 h-3.5 ${accentClass} border-2 border-white rounded-xs cursor-nesw-resize z-35 shadow-xs`}
+          title="اسحب الزاوية لتعديل الأبعاد"
+        />
+
+        {/* 7. Bottom-Left Corner (الزاوية السفلية اليسرى) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-bl', e)}
+          className={`absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 ${accentClass} border-2 border-white rounded-xs cursor-nesw-resize z-35 shadow-xs`}
+          title="اسحب الزاوية لتعديل الأبعاد"
+        />
+
+        {/* 8. Bottom-Right Corner (الزاوية السفلية اليمنى) */}
+        <div
+          onPointerDown={(e) => handlePointerDown(field, 'resize-br', e)}
+          className={`absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 ${accentClass} border-2 border-white rounded-xs cursor-nwse-resize z-35 shadow-xs`}
+          title="اسحب الزاوية لتعديل الأبعاد"
+        />
+      </>
+    );
   };
 
   // Save settings permanently
@@ -581,10 +695,10 @@ export function ChequeCalibrationTab({
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-700 hover:bg-slate-200'
                   }`}
-                  title="استمداد خلفية الشيك الحقيقية من الصورة الفعلية المرفقة"
+                  title="صورة الشيك الفعلية (الأصلية أو المرفوعة 18cm × 9cm)"
                 >
                   <ImageIcon className="w-3.5 h-3.5" />
-                  <span>صورة الشيك الفعلية (CBK)</span>
+                  <span>{calibration.customChequeImageUrl ? 'صورة الشيك المرفوعة' : 'صورة الشيك الأصلية (CBK)'}</span>
                 </button>
                 <button
                   type="button"
@@ -594,11 +708,69 @@ export function ChequeCalibrationTab({
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'text-slate-700 hover:bg-slate-200'
                   }`}
-                  title="قالب متجهي عربي للشيك"
+                  title="قالب تخطيطي هندسي"
                 >
                   <Layers className="w-3.5 h-3.5" />
                   <span>قالب هندسي</span>
                 </button>
+              </div>
+
+              {/* Upload image button in calibration toolbar */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="file"
+                  id="calibration-upload-cheque-input"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const dataUrl = event.target?.result as string;
+                      if (dataUrl) {
+                        const updated: ChequePrintSettings = {
+                          ...calibration,
+                          customChequeImageUrl: dataUrl,
+                          customChequeImageName: file.name,
+                        };
+                        setCalibration(updated);
+                        onUpdatePrintSettings(updated);
+                        setBgViewMode('scanned');
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                    if (e.target) e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('calibration-upload-cheque-input')?.click()}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold border border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 transition flex items-center gap-1.5"
+                  title="رفع صورة شيك مخصصة وضبطها تلقائياً لمقاس 9*18 سم"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>رفع صورة الشيك (9×18 سم)</span>
+                </button>
+
+                {calibration.customChequeImageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated: ChequePrintSettings = {
+                        ...calibration,
+                        customChequeImageUrl: undefined,
+                        customChequeImageName: undefined,
+                      };
+                      setCalibration(updated);
+                      onUpdatePrintSettings(updated);
+                    }}
+                    className="p-1 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition"
+                    title="استعادة صورة الشيك الأصلية الافتراضية"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Opacity Control for Background Image */}
@@ -736,7 +908,7 @@ export function ChequeCalibrationTab({
                   {bgViewMode === 'scanned' ? (
                     <div className="absolute inset-0 pointer-events-none select-none z-0">
                       <img
-                        src="/cbk_cheque_bg.jpg"
+                        src={calibration.customChequeImageUrl || '/cbk_cheque_bg.jpg'}
                         alt="خلفية الشيك البنكي التجاري CBK"
                         className="w-full h-full object-fill pointer-events-none select-none"
                         style={{ opacity: bgOpacity / 100 }}
@@ -863,115 +1035,106 @@ export function ChequeCalibrationTab({
                   {/* FIELD 1: التاريخ DATE (Top Right Box) */}
                   <div
                     onPointerDown={(e) => handlePointerDown('date', 'move', e)}
-                    className={`absolute cursor-move transition-shadow z-20 flex items-center justify-between font-mono font-bold text-slate-900 border ${
+                    className={`absolute cursor-move transition-shadow z-20 flex items-center justify-center font-mono font-bold text-slate-900 border ${
                       selectedField === 'date'
-                        ? 'border-blue-600 bg-blue-500/30 shadow-md ring-2 ring-blue-500 ring-offset-1'
-                        : 'border-blue-400/80 bg-blue-50/75 hover:border-blue-600'
-                    } rounded px-1`}
+                        ? 'border-blue-600 bg-blue-500/25 shadow-md ring-2 ring-blue-500 ring-offset-1'
+                        : 'border-blue-400/80 bg-blue-50/70 hover:border-blue-600'
+                    } rounded`}
                     style={{
                       left: `${toLeftPct(dateLeft)}%`,
                       top: `${toTopPct(dateTop)}%`,
                       width: `${toWidthPct(dateWidth)}%`,
                       height: `${toHeightPct(dateHeight)}%`,
                     }}
-                    title="حقل التاريخ (اضغط واسحب لتحريكه، أو اسحب المقبض لتغيير أبعاده)"
+                    title="حقل التاريخ (اسحب من الحواف أو الزوايا لتغيير الحجم)"
                   >
-                    <div className="flex items-center justify-between w-full h-full overflow-hidden">
+                    {/* Floating Label Badge Outside Box */}
+                    <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-blue-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
+                      التاريخ
+                    </span>
+
+                    {/* Content strictly within field bounds */}
+                    <div className="w-full h-full flex items-center justify-center font-mono font-black text-slate-950 overflow-hidden text-center truncate px-0.5 select-none">
                       <span 
                         style={{ fontSize: `${dateFontSize}px` }} 
-                        className="tracking-widest font-black text-slate-950 truncate"
+                        className="tracking-widest font-black text-slate-950 truncate max-w-full"
                       >
-                        2 5 / 0 4 / 2 0 2 6
-                      </span>
-                      <span className="text-[8px] bg-blue-600 text-white px-1 py-0.2 rounded font-sans flex-shrink-0 mr-1">
-                        التاريخ
+                        25/04/2026
                       </span>
                     </div>
 
-                    {/* Corner Resize Handle */}
-                    {selectedField === 'date' && (
-                      <div
-                        onPointerDown={(e) => handlePointerDown('date', 'resize-br', e)}
-                        className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-700 border-2 border-white rounded-xs cursor-nwse-resize z-30 shadow-xs"
-                        title="اسحب لتغيير العرض والارتفاع"
-                      />
-                    )}
+                    {/* Edge & Corner Resize Handles */}
+                    {renderResizeHandles('date', 'bg-blue-600')}
                   </div>
 
                   {/* FIELD 2: المستفيد PAYEE (Starts near 'ادفعوا لأمر' from Right) */}
                   <div
                     onPointerDown={(e) => handlePointerDown('payee', 'move', e)}
-                    className={`absolute cursor-move transition-shadow z-20 flex items-center justify-between font-bold text-slate-900 border ${
+                    className={`absolute cursor-move transition-shadow z-20 flex items-center font-bold text-slate-900 border ${
                       selectedField === 'payee'
-                        ? 'border-emerald-600 bg-emerald-500/30 shadow-md ring-2 ring-emerald-500 ring-offset-1'
-                        : 'border-emerald-400/80 bg-emerald-50/75 hover:border-emerald-600'
-                    } rounded px-2`}
+                        ? 'border-emerald-600 bg-emerald-500/25 shadow-md ring-2 ring-emerald-500 ring-offset-1'
+                        : 'border-emerald-400/80 bg-emerald-50/70 hover:border-emerald-600'
+                    } rounded`}
                     style={{
                       left: `${toLeftPct(payeeLeft)}%`,
                       top: `${toTopPct(payeeTop)}%`,
                       width: `${toWidthPct(payeeWidth)}%`,
                       height: `${toHeightPct(payeeHeight)}%`,
                     }}
-                    title="اسم المستفيد (يبدأ بمحاذاة 'ادفعوا لأمر' من اليمين)"
+                    title="اسم المستفيد (اسحب من الحواف أو الزوايا لتغيير الحجم)"
                   >
-                    <div className="flex items-center justify-between w-full h-full overflow-hidden" dir="rtl">
+                    {/* Floating Label Badge Outside Box */}
+                    <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-emerald-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
+                      اسم المستفيد
+                    </span>
+
+                    {/* Content strictly within field bounds */}
+                    <div className="w-full h-full flex items-center font-serif font-black text-slate-950 text-right overflow-hidden px-1 select-none" dir="rtl">
                       <span 
                         style={{ fontSize: `${payeeFontSize}px` }}
-                        className="truncate font-black text-slate-900 text-right w-full"
+                        className="truncate block w-full text-right font-black text-slate-950"
                       >
                         شركة البادية للمقاولات والتجارة العامة ذ.م.م
                       </span>
-                      <span className="text-[8px] bg-emerald-600 text-white px-1 py-0.2 rounded font-sans flex-shrink-0 ml-1">
-                        المستفيد
-                      </span>
                     </div>
 
-                    {/* Corner Resize Handle */}
-                    {selectedField === 'payee' && (
-                      <div
-                        onPointerDown={(e) => handlePointerDown('payee', 'resize-br', e)}
-                        className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-700 border-2 border-white rounded-xs cursor-nwse-resize z-30 shadow-xs"
-                        title="اسحب لتغيير العرض والارتفاع"
-                      />
-                    )}
+                    {/* Edge & Corner Resize Handles */}
+                    {renderResizeHandles('payee', 'bg-emerald-600')}
                   </div>
 
-                  {/* FIELD 3: التفقيط (المبلغ كتابة) WORDS (Starts near 'مبلغ وقدره' from Right) */}
+                  {/* FIELD 3: التفقيط WORDS (سطران عند الزيادة ولا يتعدى حيز الحقل) */}
                   <div
                     onPointerDown={(e) => handlePointerDown('words', 'move', e)}
-                    className={`absolute cursor-move transition-shadow z-20 flex items-center justify-between font-bold text-slate-900 border ${
+                    className={`absolute cursor-move transition-shadow z-20 flex items-center font-bold text-slate-900 border ${
                       selectedField === 'words'
-                        ? 'border-purple-600 bg-purple-500/30 shadow-md ring-2 ring-purple-500 ring-offset-1'
-                        : 'border-purple-400/80 bg-purple-50/75 hover:border-purple-600'
-                    } rounded px-2`}
+                        ? 'border-purple-600 bg-purple-500/25 shadow-md ring-2 ring-purple-500 ring-offset-1'
+                        : 'border-purple-400/80 bg-purple-50/70 hover:border-purple-600'
+                    } rounded`}
                     style={{
                       left: `${toLeftPct(wordsLeft)}%`,
                       top: `${toTopPct(wordsTop)}%`,
                       width: `${toWidthPct(wordsWidth)}%`,
                       height: `${toHeightPct(wordsHeight)}%`,
                     }}
-                    title="المبلغ كتابة / التفقيط (يبدأ بمحاذاة 'مبلغ وقدره' من اليمين)"
+                    title="التفقيط (إذا زاد يتم وضعه على سطرين داخل حيز الحقل)"
                   >
-                    <div className="flex items-center justify-between w-full h-full overflow-hidden" dir="rtl">
+                    {/* Floating Label Badge Outside Box */}
+                    <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-purple-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
+                      التفقيط (سطران عند الزيادة)
+                    </span>
+
+                    {/* Content strictly within field bounds on up to 2 lines */}
+                    <div className="w-full h-full flex items-center text-right overflow-hidden px-1 select-none" dir="rtl">
                       <span 
-                        style={{ fontSize: `${wordsFontSize}px` }}
-                        className="truncate font-semibold text-slate-900 text-right w-full"
+                        style={{ fontSize: `${wordsFontSize}px`, lineHeight: 1.2 }}
+                        className="line-clamp-2 break-words font-serif font-bold text-slate-950 text-right w-full max-h-full overflow-hidden"
                       >
-                        فقط ثلاثة آلاف وخمسمائة دينار كويتي لا غير #
-                      </span>
-                      <span className="text-[8px] bg-purple-600 text-white px-1 py-0.2 rounded font-sans flex-shrink-0 ml-1">
-                        التفقيط
+                        فقط خمسة وعشرون ألف وثلاثمائة وسبعون دينار كويتي وخمسمائة فلس لا غير #
                       </span>
                     </div>
 
-                    {/* Corner Resize Handle */}
-                    {selectedField === 'words' && (
-                      <div
-                        onPointerDown={(e) => handlePointerDown('words', 'resize-br', e)}
-                        className="absolute -bottom-1 -right-1 w-3 h-3 bg-purple-700 border-2 border-white rounded-xs cursor-nwse-resize z-30 shadow-xs"
-                        title="اسحب لتغيير العرض والارتفاع"
-                      />
-                    )}
+                    {/* Edge & Corner Resize Handles */}
+                    {renderResizeHandles('words', 'bg-purple-600')}
                   </div>
 
                   {/* FIELD 4: المبلغ رقماً AMOUNT (Inside KD Box on Left) */}
@@ -979,37 +1142,34 @@ export function ChequeCalibrationTab({
                     onPointerDown={(e) => handlePointerDown('amount', 'move', e)}
                     className={`absolute cursor-move transition-shadow z-20 flex items-center justify-center font-mono font-black text-slate-900 border ${
                       selectedField === 'amount'
-                        ? 'border-amber-600 bg-amber-500/30 shadow-md ring-2 ring-amber-500 ring-offset-1'
-                        : 'border-amber-400/80 bg-amber-50/75 hover:border-amber-600'
-                    } rounded px-1.5`}
+                        ? 'border-amber-600 bg-amber-500/25 shadow-md ring-2 ring-amber-500 ring-offset-1'
+                        : 'border-amber-400/80 bg-amber-50/70 hover:border-amber-600'
+                    } rounded`}
                     style={{
                       left: `${toLeftPct(amountLeft)}%`,
                       top: `${toTopPct(amountTop)}%`,
                       width: `${toWidthPct(amountWidth)}%`,
                       height: `${toHeightPct(amountHeight)}%`,
                     }}
-                    title="المبلغ بالأرقام داخل خانة د.ك (يسار الشيك)"
+                    title="المبلغ بالأرقام محصوراً بين علامتي #"
                   >
-                    <div className="flex items-center justify-between w-full h-full overflow-hidden">
+                    {/* Floating Label Badge Outside Box */}
+                    <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-amber-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
+                      المبلغ (#...#)
+                    </span>
+
+                    {/* Content strictly within field bounds formatted between # */}
+                    <div className="w-full h-full flex items-center justify-center font-mono font-black text-slate-950 overflow-hidden text-center px-1 select-none">
                       <span 
                         style={{ fontSize: `${amountFontSize}px` }}
                         className="font-mono font-black tracking-wider text-slate-950 truncate text-center w-full"
                       >
-                        # 3,500.000 #
-                      </span>
-                      <span className="text-[8px] bg-amber-600 text-white px-1 py-0.2 rounded font-sans flex-shrink-0 mr-1">
-                        المبلغ
+                        {formatChequeAmount(3500)}
                       </span>
                     </div>
 
-                    {/* Corner Resize Handle */}
-                    {selectedField === 'amount' && (
-                      <div
-                        onPointerDown={(e) => handlePointerDown('amount', 'resize-br', e)}
-                        className="absolute -bottom-1 -right-1 w-3 h-3 bg-amber-700 border-2 border-white rounded-xs cursor-nwse-resize z-30 shadow-xs"
-                        title="اسحب لتغيير العرض والارتفاع"
-                      />
-                    )}
+                    {/* Edge & Corner Resize Handles */}
+                    {renderResizeHandles('amount', 'bg-amber-600')}
                   </div>
 
                 </div>
@@ -1564,7 +1724,7 @@ export function ChequeCalibrationTab({
         {/* Background Image if requested */}
         {testPrintMode === 'with_bg' && (
           <img
-            src="/cbk_cheque_bg.jpg"
+            src={calibration.customChequeImageUrl || '/cbk_cheque_bg.jpg'}
             alt="خلفية الشيك"
             className="absolute inset-0 w-full h-full object-fill pointer-events-none"
             style={{ width: '180mm', height: '90mm' }}
@@ -1654,7 +1814,6 @@ export function ChequeCalibrationTab({
             fontWeight: '600',
             color: '#000000',
             textAlign: 'right',
-            whiteSpace: 'nowrap',
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
@@ -1662,7 +1821,19 @@ export function ChequeCalibrationTab({
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(147, 51, 234, 0.4)' : 'none',
           }}
         >
-          {testChequeData.words}
+          <span
+            style={{
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              lineHeight: '1.25',
+              width: '100%',
+              wordBreak: 'break-word',
+            }}
+          >
+            {testChequeData.words}
+          </span>
         </div>
 
         {/* FIELD 4: المبلغ رقماً AMOUNT */}
@@ -1681,11 +1852,12 @@ export function ChequeCalibrationTab({
             alignItems: 'center',
             justifyContent: 'center',
             whiteSpace: 'nowrap',
+            overflow: 'hidden',
             boxSizing: 'border-box',
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(217, 119, 6, 0.4)' : 'none',
           }}
         >
-          # {testChequeData.amount.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} #
+          {formatChequeAmount(testChequeData.amount)}
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Printer, 
   Save, 
@@ -10,10 +10,15 @@ import {
   Calendar,
   AlertCircle,
   Languages,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Upload,
+  Trash2,
+  BookOpen,
+  Hash
 } from 'lucide-react';
 import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings } from '../../types';
-import { tafqeetKwd, tafqeetKwdEn } from '../../utils/tafqeetKwd';
+import { tafqeetKwd, tafqeetKwdEn, formatChequeAmount } from '../../utils/tafqeetKwd';
+import { CBK_CHEQUE_BASE_COORDS } from './ChequeCalibrationTab';
 
 interface IssueChequeFormProps {
   bankAccounts: BankAccount[];
@@ -22,6 +27,7 @@ interface IssueChequeFormProps {
   selectedAccountId: string;
   onSelectAccount: (accId: string) => void;
   printSettings: ChequePrintSettings;
+  onUpdatePrintSettings?: (settings: ChequePrintSettings) => void;
   onSaveCheque: (newCheque: IssuedCheque) => void;
   onSaveAndPrint: (newCheque: IssuedCheque) => void;
   onAddNewBeneficiary: (beneficiary: Partial<Beneficiary>) => void;
@@ -35,6 +41,7 @@ export function IssueChequeForm({
   selectedAccountId,
   onSelectAccount,
   printSettings,
+  onUpdatePrintSettings,
   onSaveCheque,
   onSaveAndPrint,
   onAddNewBeneficiary,
@@ -69,6 +76,62 @@ export function IssueChequeForm({
   const [notes, setNotes] = useState<string>('');
   const [saveAsBeneficiary, setSaveAsBeneficiary] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+
+  // Custom Cheque Image Upload State
+  const [uploadMessage, setUploadMessage] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleChequeImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setUploadMessage('يرجى اختيار ملف صورة صالح (JPG, PNG, WebP)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl && onUpdatePrintSettings) {
+        const updated: ChequePrintSettings = {
+          ...printSettings,
+          customChequeImageUrl: dataUrl,
+          customChequeImageName: file.name,
+        };
+        onUpdatePrintSettings(updated);
+        try {
+          localStorage.setItem('app_cheque_print_settings', JSON.stringify(updated));
+        } catch (err) {
+          console.error(err);
+        }
+        setUploadMessage(`تم رفع وحفظ صورة الشيك بنجاح وتطبيق مقاس 9×18 سم: ${file.name}`);
+        setTimeout(() => setUploadMessage(''), 4500);
+      }
+    };
+    reader.readAsDataURL(file);
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const handleResetToDefaultImage = () => {
+    if (onUpdatePrintSettings) {
+      const updated: ChequePrintSettings = {
+        ...printSettings,
+        customChequeImageUrl: undefined,
+        customChequeImageName: undefined,
+      };
+      onUpdatePrintSettings(updated);
+      try {
+        localStorage.setItem('app_cheque_print_settings', JSON.stringify(updated));
+      } catch (err) {
+        console.error(err);
+      }
+      setUploadMessage('تمت استعادة صورة الشيك الأصلية الافتراضية.');
+      setTimeout(() => setUploadMessage(''), 3000);
+    }
+  };
 
   // Synchronize when account changes
   useEffect(() => {
@@ -121,6 +184,31 @@ export function IssueChequeForm({
     setIsManualWords(false);
     setAmountInWords(tafqeetLang === 'en' ? tafqeetKwdEn(amount) : tafqeetKwd(amount));
   };
+
+  // Calculated dynamic coordinates from calibration / printSettings for the live 180mm x 90mm preview
+  const previewDateLeft = Math.round((CBK_CHEQUE_BASE_COORDS.date.left + (printSettings.offsetX || 0) + (printSettings.dateOffsetX || 0)) * 10) / 10;
+  const previewDateTop = Math.round((CBK_CHEQUE_BASE_COORDS.date.top + (printSettings.offsetY || 0) + (printSettings.dateOffsetY || 0)) * 10) / 10;
+  const previewDateWidth = Math.round((printSettings.dateWidth ?? CBK_CHEQUE_BASE_COORDS.date.width) * 10) / 10;
+  const previewDateHeight = Math.round((printSettings.dateHeight ?? CBK_CHEQUE_BASE_COORDS.date.height) * 10) / 10;
+  const previewDateFontSize = printSettings.dateFontSize ?? CBK_CHEQUE_BASE_COORDS.date.fontSize;
+
+  const previewPayeeLeft = Math.round((CBK_CHEQUE_BASE_COORDS.payee.left + (printSettings.offsetX || 0) + (printSettings.payeeOffsetX || 0)) * 10) / 10;
+  const previewPayeeTop = Math.round((CBK_CHEQUE_BASE_COORDS.payee.top + (printSettings.offsetY || 0) + (printSettings.payeeOffsetY || 0)) * 10) / 10;
+  const previewPayeeWidth = Math.round((printSettings.payeeWidth ?? CBK_CHEQUE_BASE_COORDS.payee.width) * 10) / 10;
+  const previewPayeeHeight = Math.round((printSettings.payeeHeight ?? CBK_CHEQUE_BASE_COORDS.payee.height) * 10) / 10;
+  const previewPayeeFontSize = printSettings.payeeFontSize ?? CBK_CHEQUE_BASE_COORDS.payee.fontSize;
+
+  const previewWordsLeft = Math.round((CBK_CHEQUE_BASE_COORDS.words.left + (printSettings.offsetX || 0) + (printSettings.wordsOffsetX || 0)) * 10) / 10;
+  const previewWordsTop = Math.round((CBK_CHEQUE_BASE_COORDS.words.top + (printSettings.offsetY || 0) + (printSettings.wordsOffsetY || 0)) * 10) / 10;
+  const previewWordsWidth = Math.round((printSettings.wordsWidth ?? CBK_CHEQUE_BASE_COORDS.words.width) * 10) / 10;
+  const previewWordsHeight = Math.round((printSettings.wordsHeight ?? CBK_CHEQUE_BASE_COORDS.words.height) * 10) / 10;
+  const previewWordsFontSize = printSettings.wordsFontSize ?? CBK_CHEQUE_BASE_COORDS.words.fontSize;
+
+  const previewAmountLeft = Math.round((CBK_CHEQUE_BASE_COORDS.amount.left + (printSettings.offsetX || 0) + (printSettings.amountOffsetX || 0)) * 10) / 10;
+  const previewAmountTop = Math.round((CBK_CHEQUE_BASE_COORDS.amount.top + (printSettings.offsetY || 0) + (printSettings.amountOffsetY || 0)) * 10) / 10;
+  const previewAmountWidth = Math.round((printSettings.amountWidth ?? CBK_CHEQUE_BASE_COORDS.amount.width) * 10) / 10;
+  const previewAmountHeight = Math.round((printSettings.amountHeight ?? CBK_CHEQUE_BASE_COORDS.amount.height) * 10) / 10;
+  const previewAmountFontSize = printSettings.amountFontSize ?? CBK_CHEQUE_BASE_COORDS.amount.fontSize;
 
   // Build the issued cheque object
   const buildChequeObject = (): IssuedCheque => {
@@ -490,111 +578,225 @@ export function IssueChequeForm({
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto flex justify-center items-center">
             
             <div 
-              className="w-[576px] h-[288px] relative rounded-xl shadow-md p-4 select-none flex flex-col justify-between overflow-hidden border border-emerald-800/30 bg-[#f4faf7]"
+              style={{
+                width: '576px',
+                height: '288px',
+                aspectRatio: '180 / 90',
+              }}
+              className="relative rounded-xl shadow-md select-none overflow-hidden border border-slate-300 bg-white"
             >
-              {/* Vector Watermark & Security Background */}
-              <div 
-                className="absolute inset-0 pointer-events-none opacity-20"
-                style={{
-                  backgroundImage: `radial-gradient(#00875A 0.75px, transparent 0.75px), radial-gradient(#00875A 0.75px, #f4faf7 0.75px)`,
-                  backgroundSize: '10px 10px',
-                  backgroundPosition: '0 0, 5px 5px',
+              {/* صورة الشيك الفعلية (الأصلية أو المرفوعة من المستخدم) بمقاس 9*18 سم مضبوط تلقائياً */}
+              <img 
+                src={printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg'}
+                alt="شيك البنك التجاري الكويتي (CBK)"
+                className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/cbk_cheque_template.jpg';
                 }}
               />
 
-              {/* Bank Header (CBK Al-Tijari) */}
-              <div className="flex justify-between items-start z-10">
-                <div className="text-[8px] font-mono text-[#00875A]/70">
-                  <span>CHEQUE NO: </span>
-                  <span className="font-bold">{String(chequeSerial).padStart(8, '0')}</span>
-                </div>
-
-                <div className="flex items-center gap-2 text-right">
-                  <div>
-                    <div className="flex items-center justify-end gap-1.5 leading-none">
-                      <span className="text-[11px] font-bold font-sans text-[#00875A]">Al-Tijari</span>
-                      <span className="text-base font-black font-serif text-[#00875A]">التجاري</span>
-                    </div>
-                    <div className="text-[7.5px] font-bold text-[#00875A]/90 mt-0.5">
-                      البنك التجاري الكويتي (ش.م.ك.ع)
-                    </div>
-                  </div>
-                  <svg viewBox="0 0 100 100" className="w-7 h-7 text-[#00875A]" fill="currentColor">
-                    <path d="M50 0 L58 35 L95 20 L68 50 L95 80 L58 65 L50 100 L42 65 L5 80 L32 50 L5 20 L42 35 Z" />
-                  </svg>
-                </div>
+              {/* 1. حقل التاريخ DATE */}
+              <div 
+                className="absolute flex items-center justify-center font-mono font-black text-slate-950 tracking-widest z-10 overflow-hidden"
+                style={{
+                  left: `${(previewDateLeft / 180) * 100}%`,
+                  top: `${(previewDateTop / 90) * 100}%`,
+                  width: `${(previewDateWidth / 180) * 100}%`,
+                  height: `${(previewDateHeight / 90) * 100}%`,
+                  fontSize: `${previewDateFontSize}px`,
+                }}
+                title="التاريخ"
+              >
+                <span className="w-full h-full flex items-center justify-center text-center font-black font-mono tracking-widest truncate select-none px-0.5">
+                  {dayStr}/{monthStr}/{yearStr}
+                </span>
               </div>
 
-              {/* 1. Date Field (التاريخ) */}
+              {/* 2. حقل المستفيد PAYEE (يعرض بدقة في حيز الحقل) */}
               <div 
-                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-xs tracking-wider"
+                className="absolute flex items-center font-serif font-black text-slate-950 px-1 z-10 overflow-hidden"
+                dir="rtl"
                 style={{
-                  right: '36px',
-                  top: '60px',
-                  width: '130px',
+                  left: `${(previewPayeeLeft / 180) * 100}%`,
+                  top: `${(previewPayeeTop / 90) * 100}%`,
+                  width: `${(previewPayeeWidth / 180) * 100}%`,
+                  height: `${(previewPayeeHeight / 90) * 100}%`,
+                  fontSize: `${previewPayeeFontSize}px`,
                 }}
+                title="اسم المستفيد"
               >
-                <div className="text-right w-full">
-                  <span className="text-[8px] text-slate-400 block mb-0.5 font-sans">التاريخ / Date:</span>
-                  <span className="bg-white/80 px-2 py-0.5 rounded border border-slate-300 shadow-2xs font-bold font-mono">
-                    {dayStr}/{monthStr}/{yearStr}
-                  </span>
-                </div>
-              </div>
-
-              {/* 2. Beneficiary Field (إدفعوا لأمر) */}
-              <div 
-                className="absolute flex flex-col font-serif font-black text-slate-950 text-sm px-1 truncate"
-                style={{
-                  left: '70px',
-                  top: '106px',
-                  width: '400px',
-                }}
-              >
-                <span className="text-[8px] text-slate-400 font-sans block mb-0.5 text-right">ادفعوا لأمر / Pay to the order of:</span>
-                <span className="bg-white/85 px-2.5 py-1 rounded shadow-2xs border border-slate-300/80 truncate block w-full text-right font-bold text-slate-900">
+                <span className="truncate block w-full text-right font-serif font-black text-slate-950">
                   {beneficiaryName || '...................................................'}
                 </span>
               </div>
 
-              {/* 3. Amount in Words / Tafqeet (دينار كويتي) */}
+              {/* 3. حقل التفقيط WORDS (إذا زاد يتم وضعه على سطرين ولا يتعدى حيز الحقل) */}
               <div 
-                className="absolute flex flex-col font-sans font-bold text-slate-900 text-xs leading-tight px-1"
+                className="absolute flex items-center font-sans font-bold text-slate-900 px-1 z-10 overflow-hidden"
+                dir="rtl"
                 style={{
-                  left: '70px',
-                  top: '154px',
-                  width: '320px',
+                  left: `${(previewWordsLeft / 180) * 100}%`,
+                  top: `${(previewWordsTop / 90) * 100}%`,
+                  width: `${(previewWordsWidth / 180) * 100}%`,
+                  height: `${(previewWordsHeight / 90) * 100}%`,
+                  fontSize: `${previewWordsFontSize}px`,
                 }}
+                title="المبلغ كتابة (التفقيط)"
               >
-                <span className="text-[8px] text-slate-400 block mb-0.5 text-right">مبلغ وقدره / The Sum of:</span>
-                <span className="bg-white/85 px-2.5 py-1 rounded shadow-2xs border border-slate-300/80 truncate block w-full text-slate-900 font-serif font-bold text-[11px]">
+                <span 
+                  className="line-clamp-2 break-words block w-full text-slate-950 font-serif font-bold text-right leading-tight max-h-full overflow-hidden"
+                  style={{ fontSize: `${previewWordsFontSize}px`, lineHeight: 1.2 }}
+                >
                   {amountInWords || '...................................................'}
                 </span>
               </div>
 
-              {/* 4. Amount in Digits with single # at both ends (KD Box) */}
+              {/* 4. حقل المبلغ رقماً محصوراً بين علامتي # (KD Box) */}
               <div 
-                className="absolute flex items-center justify-center font-mono font-black text-slate-950 text-sm tracking-wider"
+                className="absolute flex items-center justify-center font-mono font-black text-slate-950 z-10 overflow-hidden"
                 style={{
-                  right: '36px',
-                  top: '150px',
-                  width: '140px',
-                  height: '42px',
+                  left: `${(previewAmountLeft / 180) * 100}%`,
+                  top: `${(previewAmountTop / 90) * 100}%`,
+                  width: `${(previewAmountWidth / 180) * 100}%`,
+                  height: `${(previewAmountHeight / 90) * 100}%`,
+                  fontSize: `${previewAmountFontSize}px`,
                 }}
+                title="المبلغ رقماً"
               >
-                <span className="bg-white px-3 py-1.5 rounded-lg shadow-xs border-2 border-[#00875A] font-black text-[#00875A] text-base">
-                  #{amount.toFixed(3)}#
+                <span 
+                  className="w-full h-full flex items-center justify-center font-mono font-black text-slate-950 tracking-wider truncate text-center"
+                  style={{ fontSize: `${previewAmountFontSize}px` }}
+                >
+                  {formatChequeAmount(amount)}
                 </span>
-              </div>
-
-              {/* Cheque Bottom Security Line / MICR */}
-              <div className="pt-2 flex justify-between items-center text-[9px] font-mono text-slate-600 border-t border-[#00875A]/30 z-10">
-                <span className="tracking-widest">⑈{String(chequeSerial).padStart(8, '0')}⑈ 019⑉ 00123456789⑈ 01</span>
-                <span className="text-[8px] text-[#00875A]/70 font-sans">معتمد رسمي - البنك التجاري الكويتي</span>
               </div>
 
             </div>
 
+          </div>
+
+          {/* مستطيل رفع صورة الشيك وحفظها تحت المعاينة وضبطها لمقاس 9*18 سم تلقائياً */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">رفع صورة الشيك وضبط المقاس تلقائياً</h4>
+                  <p className="text-[10px] text-slate-500">
+                    ارفع أي صورة لشيك البنك وسيقوم النظام بضبطها تلقائياً لمقاس الشيك الفعلي 9 × 18 سم (180mm × 90mm)
+                  </p>
+                </div>
+              </div>
+
+              {printSettings.customChequeImageUrl && (
+                <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>تم اعتماد صورة مخصصة</span>
+                </span>
+              )}
+            </div>
+
+            {/* أزرار رفع الصورة وحفظها */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleChequeImageUpload}
+                className="hidden"
+                id="cheque-image-upload-input"
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-xs transition"
+              >
+                <Upload className="w-4 h-4" />
+                <span>رفع صورة الشيك (تلقائي 9×18 سم)</span>
+              </button>
+
+              {printSettings.customChequeImageUrl && (
+                <button
+                  type="button"
+                  onClick={handleResetToDefaultImage}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 rounded-xl text-xs font-medium border border-slate-200 transition"
+                  title="استعادة صورة الشيك الأصلية الافتراضية"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>استعادة الصورة الافتراضية</span>
+                </button>
+              )}
+
+              {printSettings.customChequeImageName && (
+                <span className="text-[11px] font-mono text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 truncate max-w-[200px]" title={printSettings.customChequeImageName}>
+                  {printSettings.customChequeImageName}
+                </span>
+              )}
+            </div>
+
+            {uploadMessage && (
+              <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{uploadMessage}</span>
+              </div>
+            )}
+          </div>
+
+          {/* مستطيل بيانات الشيك (بعيد عن صورة الشيك وتحت التصميم): الحساب، رقم الدفتر، رقم الشيك */}
+          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
+            <div className="text-[11px] font-bold text-slate-700 flex items-center justify-between border-b border-slate-200/80 pb-2">
+              <span className="flex items-center gap-1.5">
+                <Landmark className="w-3.5 h-3.5 text-amber-600" />
+                <span>بيانات الحساب والدفتر الخاصة بالشيك الحالي:</span>
+              </span>
+              <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                مقاس الشيك: 180mm × 90mm (9×18 سم)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+              {/* الحساب البنكي */}
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                <div className="text-[10px] text-slate-400 font-bold mb-0.5">الحساب البنكي المصدر</div>
+                <div className="font-bold text-slate-800 text-[11px] truncate">
+                  {activeAccount?.accountName || 'حساب البنك التجاري'}
+                </div>
+                <div className="text-[9.5px] font-mono text-slate-500 mt-0.5">
+                  {activeAccount?.accountNumber || '-'}
+                </div>
+              </div>
+
+              {/* رقم الدفتر */}
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                <div className="text-[10px] text-slate-400 font-bold mb-0.5 flex items-center gap-1">
+                  <BookOpen className="w-3 h-3 text-slate-400" />
+                  <span>دفتر الشيكات</span>
+                </div>
+                <div className="font-bold text-slate-800 text-[11px] truncate">
+                  {activeBook?.bookName || 'دفتر التجاري'}
+                </div>
+                <div className="text-[9.5px] font-mono text-slate-500 mt-0.5">
+                  كود: {activeBook?.bookCode || '-'}
+                </div>
+              </div>
+
+              {/* رقم الشيك التسلسلي */}
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                <div className="text-[10px] text-slate-400 font-bold mb-0.5 flex items-center gap-1">
+                  <Hash className="w-3 h-3 text-slate-400" />
+                  <span>رقم الشيك التسلسلي</span>
+                </div>
+                <div className="font-mono font-black text-blue-700 text-sm">
+                  {String(chequeSerial).padStart(8, '0')}
+                </div>
+                <div className="text-[9.5px] text-slate-500 mt-0.5">
+                  المتبقي بالدفتر: {activeBook ? (activeBook.serialTo - chequeSerial + 1) : '-'} ورقة
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Helper details */}

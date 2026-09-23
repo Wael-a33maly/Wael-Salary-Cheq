@@ -105,6 +105,8 @@ export interface ChequePrintSettings {
   defaultPrinterName?: string; // اسم طابعة الشيكات الافتراضية
   chequeDueDateAlertDays?: number; // عدد الأيام لتنبيه استحقاق الشيك
   templateMode?: 'scanned_image' | 'vector_template' | 'blank' | 'none'; // قالب المعاينة: صورة ممسوحة، تصميم متجهي، أو بدون خلفية
+  customChequeImageUrl?: string; // صورة الشيك المرفوعة من المستخدم مخصصة
+  customChequeImageName?: string; // اسم ملف صورة الشيك المرفوعة
   // ضبط كل حقل منفرداً (أعلى/أسفل Y، يمين/يسار X بالملليمتر)
   dateOffsetX?: number;
   dateOffsetY?: number;

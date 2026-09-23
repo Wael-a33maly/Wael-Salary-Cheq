@@ -279,3 +279,18 @@ export function tafqeetKwdEn(amount: number): string {
   return words + ' Only';
 }
 
+/**
+ * تنسيق المبلغ بالأرقام للشيكات المصرفية محصوراً بين علامتي # مع الفواصل والكسور
+ * Example: 1250 -> "#1,250.000#"
+ */
+export function formatChequeAmount(amount: number): string {
+  if (isNaN(amount) || amount === null || amount === undefined) {
+    return '#0.000#';
+  }
+  const formatted = Math.abs(amount).toLocaleString('en-US', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
+  return `#${formatted}#`;
+}
+

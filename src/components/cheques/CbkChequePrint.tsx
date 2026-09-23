@@ -10,7 +10,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { IssuedCheque, BankAccount, ChequeBook, ChequePrintSettings } from '../../types';
-import { tafqeetKwd, tafqeetKwdEn } from '../../utils/tafqeetKwd';
+import { tafqeetKwd, tafqeetKwdEn, formatChequeAmount } from '../../utils/tafqeetKwd';
 import { ChequeReceiptAndEnvelopeModal } from './ChequeReceiptAndEnvelopeModal';
 
 interface CbkChequePrintProps {
@@ -292,7 +292,7 @@ export function CbkChequePrint({
             {/* 1. خلفية الشيك البنكي الحقيقية (للشاشة فقط ومخفية في الطباعة على شيك فعلي) */}
             <div className="absolute inset-0 pointer-events-none select-none screen-only-guide print:hidden z-0">
               <img
-                src="/cbk_cheque_bg.jpg"
+                src={printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg'}
                 alt="خلفية الشيك البنكي CBK"
                 className="w-full h-full object-fill opacity-90"
                 onError={(e) => {
@@ -319,9 +319,9 @@ export function CbkChequePrint({
                 height: `${dateHeight}mm`,
                 fontSize: `${dateFontSize}px`,
               }}
-              className="flex items-center justify-center font-mono font-black text-slate-950 tracking-wider z-10"
+              className="flex items-center justify-center font-mono font-black text-slate-950 tracking-wider z-10 overflow-hidden"
             >
-              <span className="select-all print:text-black font-mono font-black">
+              <span className="select-all print:text-black font-mono font-black truncate max-w-full text-center">
                 {formattedDate}
               </span>
             </div>
@@ -336,7 +336,7 @@ export function CbkChequePrint({
                 height: `${payeeHeight}mm`,
                 fontSize: `${payeeFontSize}px`,
               }}
-              className="flex items-center justify-end text-right font-serif font-black text-slate-950 px-1 truncate z-10"
+              className="flex items-center justify-end text-right font-serif font-black text-slate-950 px-1 z-10 overflow-hidden"
               dir="rtl"
             >
               <span className="truncate block w-full select-all print:text-black font-serif font-black text-right">
@@ -344,7 +344,7 @@ export function CbkChequePrint({
               </span>
             </div>
 
-            {/* 3. التفقيط (يبدأ من جهة اليمين عند مبلغ وقدره) */}
+            {/* 3. التفقيط (يبدأ من جهة اليمين عند مبلغ وقدره، ويلتف على سطرين عند الزيادة) */}
             <div 
               style={{
                 position: 'absolute',
@@ -354,10 +354,13 @@ export function CbkChequePrint({
                 height: `${wordsHeight}mm`,
                 fontSize: `${wordsFontSize}px`,
               }}
-              className="flex items-center justify-end text-right font-sans font-bold text-slate-950 leading-tight px-1 z-10 overflow-hidden"
+              className="flex items-center justify-end text-right font-sans font-bold text-slate-950 px-1 z-10 overflow-hidden"
               dir="rtl"
             >
-              <span className="block leading-snug select-all print:text-black font-sans font-bold text-right">
+              <span 
+                className="line-clamp-2 break-words block w-full leading-tight select-all print:text-black font-sans font-bold text-right max-h-full overflow-hidden"
+                style={{ lineHeight: 1.25 }}
+              >
                 {activeTafqeet}
               </span>
             </div>
@@ -372,10 +375,10 @@ export function CbkChequePrint({
                 height: `${amountHeight}mm`,
                 fontSize: `${amountFontSize}px`,
               }}
-              className="flex items-center justify-center font-mono font-black text-slate-950 tracking-wider z-10"
+              className="flex items-center justify-center font-mono font-black text-slate-950 tracking-wider z-10 overflow-hidden"
             >
-              <span className="select-all print:text-black font-mono font-black">
-                #{cheque.amount.toFixed(3)}#
+              <span className="select-all print:text-black font-mono font-black truncate max-w-full text-center">
+                {formatChequeAmount(cheque.amount)}
               </span>
             </div>
 
