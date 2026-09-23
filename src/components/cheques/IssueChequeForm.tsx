@@ -14,9 +14,11 @@ import {
   Upload,
   Trash2,
   BookOpen,
-  Hash
+  Hash,
+  Ruler,
+  Layers
 } from 'lucide-react';
-import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings } from '../../types';
+import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings, ChequeSizeTemplate } from '../../types';
 import { tafqeetKwd, tafqeetKwdEn, formatChequeAmount } from '../../utils/tafqeetKwd';
 import { CBK_CHEQUE_BASE_COORDS } from './ChequeCalibrationTab';
 

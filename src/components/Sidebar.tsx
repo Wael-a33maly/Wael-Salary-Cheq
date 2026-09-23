@@ -25,7 +25,8 @@ import {
   ListOrdered,
   FileSpreadsheet,
   BookOpen,
-  Sliders
+  Sliders,
+  Scale
 } from 'lucide-react';
 
 export const REPORTS_SUB_ITEMS = [
@@ -453,6 +454,33 @@ export function Sidebar({
 
           {/* Divider */}
           <div className="pt-2 pb-1 border-t border-slate-800/60" />
+
+          {/* مطابقة البنك Bank Reconciliation Tab */}
+          <button
+            onClick={() => handleNavClick('reconciliation')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition group relative ${
+              activeTab === 'reconciliation'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            } ${isCollapsed ? 'justify-center' : 'justify-start'}`}
+            title={isCollapsed ? 'مطابقة البنك Bank Reconciliation' : undefined}
+          >
+            <Scale className={`w-4 h-4 flex-shrink-0 ${activeTab === 'reconciliation' ? 'text-white' : 'text-emerald-400'}`} />
+            {!isCollapsed && (
+              <div className="flex items-center justify-between flex-1 truncate">
+                <span className="truncate text-right">مطابقة البنك</span>
+                <span className="text-[9px] bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 px-1.5 py-0.5 rounded-full font-bold">
+                  جديد
+                </span>
+              </div>
+            )}
+
+            {isCollapsed && (
+              <div className="absolute right-full mr-2 hidden group-hover:block bg-slate-800 text-white text-xs font-bold px-2.5 py-1 rounded-md whitespace-nowrap shadow-xl border border-slate-700 z-50 pointer-events-none">
+                مطابقة البنك Bank Reconciliation
+              </div>
+            )}
+          </button>
 
           {/* 3. Users (Outside الرواتب) */}
           <button

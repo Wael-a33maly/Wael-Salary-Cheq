@@ -141,11 +141,44 @@ export interface BeneficiaryCategory {
   isCustom?: boolean;
 }
 
+export interface ChequeSizeTemplate {
+  id: string; // e.g. "tpl-cbk-std", "tpl-cbk-corp"
+  name: string; // e.g. "شيك تجاري قياسي", "شيك شركات عريض"
+  widthCm: number; // العرض بالسنتيمتر (e.g. 18.0, 20.0, 21.0, 23.5)
+  heightCm: number; // الارتفاع بالسنتيمتر (e.g. 8.5, 9.0)
+  chequeImageUrl?: string; // صورة ستامب الشيك المرفوعة الخاصة بهذا المقاس
+  chequeImageName?: string;
+  isDefault?: boolean;
+  notes?: string;
+  // Field coordinates overrides in mm for this specific size
+  dateLeftMm?: number;
+  dateTopMm?: number;
+  dateWidthMm?: number;
+  dateHeightMm?: number;
+  payeeLeftMm?: number;
+  payeeTopMm?: number;
+  payeeWidthMm?: number;
+  payeeHeightMm?: number;
+  wordsLeftMm?: number;
+  wordsTopMm?: number;
+  wordsWidthMm?: number;
+  wordsHeightMm?: number;
+  amountLeftMm?: number;
+  amountTopMm?: number;
+  amountWidthMm?: number;
+  amountHeightMm?: number;
+  // Font sizes
+  dateFontSize?: number;
+  payeeFontSize?: number;
+  wordsFontSize?: number;
+  amountFontSize?: number;
+}
+
 export interface BankAccount {
   id: string; // e.g. "acc-cbk-main"
   accountName: string; // e.g. "حساب العمليات الرئيسي - البنك التجاري"
   bankName: string; // e.g. "البنك التجاري الكويتي (CBK)"
-  bankCode: 'CBK' | 'NBK' | 'KFH' | 'GULF' | 'BURGAN' | 'BOUBYAN' | 'WARBA';
+  bankCode: 'CBK' | 'NBK' | 'KFH' | 'GULF' | 'BURGAN' | 'BOUBYAN' | 'WARBA' | string;
   accountNumber: string; // e.g. "1020491823"
   iban: string; // e.g. "KW18CBKU000000001020491823"
   branchName: string; // e.g. "الفرع الرئيسي - شارع مبارك الكبير"
@@ -153,8 +186,16 @@ export interface BankAccount {
   currentBalance: number; // الرصيد الحالي التقديري بالدينار الكويتي
   isDefault: boolean;
   status: 'active' | 'inactive';
-  chequeTemplate: 'CBK' | 'NBK' | 'KFH' | 'STANDARD';
+  chequeTemplate: 'CBK' | 'NBK' | 'KFH' | 'STANDARD' | string;
   createdAt?: string;
+
+  // أبعاد وستامب الشيك بالسنتيمتر (cm) ودعم مقاسات الشيكات المتعددة
+  chequeWidthCm?: number; // عرض الشيك بالسنتيمتر (مثلاً 18.0 أو 21.0 سم)
+  chequeHeightCm?: number; // ارتفاع الشيك بالسنتيمتر (مثلاً 9.0 أو 8.5 سم)
+  chequeImageUrl?: string; // صورة الشيك أو ستامب الشيك المرفوعة
+  chequeImageName?: string;
+  activeTemplateId?: string; // القالب النشط المختار حالياً
+  chequeTemplates?: ChequeSizeTemplate[]; // قائمة قوالب ومقاسات الشيكات المتعددة لهذا الحساب
 }
 
 export interface ChequeBook {
@@ -208,6 +249,10 @@ export interface IssuedCheque {
   bearerCrossed: boolean; // شطب عبارة "أو لحامله"
   purpose: string; // البيان / الغرض (مثال: مستخلص توريدات، إيجار، رواتب...)
   notes?: string;
+  templateId?: string; // معرف القالب أو المقاس الذي تم إصدار الشيك بناءً عليه
+  templateName?: string; // اسم مقاس الشيك
+  chequeWidthCm?: number; // عرض الشيك بالسنتيمتر وقت الإصدار
+  chequeHeightCm?: number; // ارتفاع الشيك بالسنتيمتر وقت الإصدار
   createdBy: string;
   createdAt: string;
 }

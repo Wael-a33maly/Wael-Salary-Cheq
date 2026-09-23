@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   Printer, 
   X, 
@@ -7,9 +7,18 @@ import {
   Check,
   Building2,
   Sliders,
-  CheckCircle2
+  CheckCircle2,
+  Layers,
+  Ruler,
+  Eye,
+  EyeOff,
+  Image as ImageIcon,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight
 } from 'lucide-react';
-import { IssuedCheque, BankAccount, ChequeBook, ChequePrintSettings } from '../../types';
+import { IssuedCheque, BankAccount, ChequeBook, ChequePrintSettings, ChequeSizeTemplate } from '../../types';
 import { tafqeetKwd, tafqeetKwdEn, formatChequeAmount } from '../../utils/tafqeetKwd';
 import { ChequeReceiptAndEnvelopeModal } from './ChequeReceiptAndEnvelopeModal';
 
@@ -25,15 +34,6 @@ interface CbkChequePrintProps {
   onNavigateToCalibration?: () => void;
 }
 
-// Base coordinates on an official CBK 180mm x 90mm cheque (Width 18cm, Height 9cm)
-// Derived directly from the physical CBK cheque layout
-const BASE_COORDS = {
-  date: { left: 134, top: 12, width: 36, height: 8.5 },
-  payee: { left: 16, top: 29, width: 120, height: 8.5 },
-  words: { left: 54, top: 41, width: 84, height: 9.5 },
-  amount: { left: 10, top: 38, width: 42, height: 12.5 },
-};
-
 export function CbkChequePrint({
   cheque,
   bankAccount,
@@ -42,13 +42,52 @@ export function CbkChequePrint({
   onClose,
   onNavigateToCalibration,
 }: CbkChequePrintProps) {
-  // Tafqeet Language: default to Arabic or English based on beneficiary / cheque setting
+  // Available templates for this bank account
+  const templates: ChequeSizeTemplate[] = bankAccount.chequeTemplates && bankAccount.chequeTemplates.length > 0
+    ? bankAccount.chequeTemplates
+    : [
+        {
+          id: 'tpl-default',
+          name: `${bankAccount.bankName} (${bankAccount.chequeWidthCm || 21.0} × ${bankAccount.chequeHeightCm || 8.5} سم)`,
+          widthCm: bankAccount.chequeWidthCm || 21.0,
+          heightCm: bankAccount.chequeHeightCm || 8.5,
+          chequeImageUrl: bankAccount.chequeImageUrl,
+          chequeImageName: bankAccount.chequeImageName,
+          isDefault: true,
+        }
+      ];
+
+  // Active selected template (defaults to matching cheque's templateId, or account default, or first template)
+  const initialTemplateId = cheque.templateId || bankAccount.activeTemplateId || templates[0]?.id;
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(initialTemplateId);
+  
+  const activeTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
+
+  // Dynamic Dimensions in cm and mm
+  const widthCm = activeTemplate.widthCm || bankAccount.chequeWidthCm || 21.0;
+  const heightCm = activeTemplate.heightCm || bankAccount.chequeHeightCm || 8.5;
+  const widthMm = Math.round(widthCm * 10);
+  const heightMm = Math.round(heightCm * 10);
+
+  // Background stamp image for this cheque template
+  const stampImageUrl = activeTemplate.chequeImageUrl || bankAccount.chequeImageUrl || printSettings.customChequeImageUrl;
+
+  // Print Mode: Print text only onto physical cheque paper OR print with full background stamp
+  const [printWithBackground, setPrintWithBackground] = useState<boolean>(false);
+  const [showScreenBackground, setShowScreenBackground] = useState<boolean>(true);
+
+  // Crossing Lines ("A/C PAYEE ONLY") & Bearer crossing
+  const [isCrossed, setIsCrossed] = useState<boolean>(cheque.isCrossed ?? true);
+  const [isBearerCrossed, setIsBearerCrossed] = useState<boolean>(cheque.bearerCrossed ?? true);
+
+  // Quick fine offset adjustments (mm)
+  const [fineOffsetX, setFineOffsetX] = useState<number>(printSettings.offsetX || 0);
+  const [fineOffsetY, setFineOffsetY] = useState<number>(printSettings.offsetY || 0);
+
+  // Tafqeet Language: default to Arabic or English
   const [printLanguage, setPrintLanguage] = useState<'ar' | 'en'>(
     cheque.tafqeetLang || (/^[A-Za-z]/.test(cheque.beneficiaryName) ? 'en' : 'ar')
   );
-
-  // Printer default name
-  const defaultPrinter = printSettings.defaultPrinterName || 'HP LaserJet Pro M404n (درج الشيكات المخصص)';
 
   // Receipt & Envelope Modal State
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -85,46 +124,58 @@ export function CbkChequePrint({
     }, 250);
   };
 
-  // Field Coordinates & Dimensions on 180mm x 90mm physical cheque based on saved calibration
-  const dateLeft = BASE_COORDS.date.left + (printSettings.offsetX || 0) + (printSettings.dateOffsetX || 0);
-  const dateTop = BASE_COORDS.date.top + (printSettings.offsetY || 0) + (printSettings.dateOffsetY || 0);
-  const dateWidth = printSettings.dateWidth || BASE_COORDS.date.width;
-  const dateHeight = printSettings.dateHeight || BASE_COORDS.date.height;
+  // Dynamic field positioning relative to physical cheque dimensions (in mm)
+  // Date (Top-Right in Arabic cheques, ~75% width or 10-15mm from right)
+  const baseDateLeft = Math.round(widthMm * 0.74);
+  const baseDateTop = Math.round(heightMm * 0.13);
+  const dateLeft = baseDateLeft + fineOffsetX + (printSettings.dateOffsetX || 0);
+  const dateTop = baseDateTop + fineOffsetY + (printSettings.dateOffsetY || 0);
+  const dateWidth = printSettings.dateWidth || 38;
+  const dateHeight = printSettings.dateHeight || 8.5;
   const dateFontSize = printSettings.dateFontSize || 12;
 
-  const payeeLeft = BASE_COORDS.payee.left + (printSettings.offsetX || 0) + (printSettings.payeeOffsetX || 0);
-  const payeeTop = BASE_COORDS.payee.top + (printSettings.offsetY || 0) + (printSettings.payeeOffsetY || 0);
-  const payeeWidth = printSettings.payeeWidth || BASE_COORDS.payee.width;
-  const payeeHeight = printSettings.payeeHeight || BASE_COORDS.payee.height;
+  // Payee ("ادفعوا لأمر") (Right aligned, ~32% from top, spans across middle)
+  const basePayeeLeft = Math.round(widthMm * 0.09);
+  const basePayeeTop = Math.round(heightMm * 0.32);
+  const payeeLeft = basePayeeLeft + fineOffsetX + (printSettings.payeeOffsetX || 0);
+  const payeeTop = basePayeeTop + fineOffsetY + (printSettings.payeeOffsetY || 0);
+  const payeeWidth = printSettings.payeeWidth || Math.round(widthMm * 0.72);
+  const payeeHeight = printSettings.payeeHeight || 9;
   const payeeFontSize = printSettings.payeeFontSize || 13;
 
-  const wordsLeft = BASE_COORDS.words.left + (printSettings.offsetX || 0) + (printSettings.wordsOffsetX || 0);
-  const wordsTop = BASE_COORDS.words.top + (printSettings.offsetY || 0) + (printSettings.wordsOffsetY || 0);
-  const wordsWidth = printSettings.wordsWidth || BASE_COORDS.words.width;
-  const wordsHeight = printSettings.wordsHeight || BASE_COORDS.words.height;
+  // Words ("مبلغ وقدره") (Spans middle-left to right, ~45% from top)
+  const baseWordsLeft = Math.round(widthMm * 0.28);
+  const baseWordsTop = Math.round(heightMm * 0.46);
+  const wordsLeft = baseWordsLeft + fineOffsetX + (printSettings.wordsOffsetX || 0);
+  const wordsTop = baseWordsTop + fineOffsetY + (printSettings.wordsOffsetY || 0);
+  const wordsWidth = printSettings.wordsWidth || Math.round(widthMm * 0.52);
+  const wordsHeight = printSettings.wordsHeight || 11;
   const wordsFontSize = printSettings.wordsFontSize || 11;
 
-  const amountLeft = BASE_COORDS.amount.left + (printSettings.offsetX || 0) + (printSettings.amountOffsetX || 0);
-  const amountTop = BASE_COORDS.amount.top + (printSettings.offsetY || 0) + (printSettings.amountOffsetY || 0);
-  const amountWidth = printSettings.amountWidth || BASE_COORDS.amount.width;
-  const amountHeight = printSettings.amountHeight || BASE_COORDS.amount.height;
+  // Amount in Digits ("د.ك # 0.000 #") (Left box, ~42% from top)
+  const baseAmountLeft = Math.round(widthMm * 0.05);
+  const baseAmountTop = Math.round(heightMm * 0.42);
+  const amountLeft = baseAmountLeft + fineOffsetX + (printSettings.amountOffsetX || 0);
+  const amountTop = baseAmountTop + fineOffsetY + (printSettings.amountOffsetY || 0);
+  const amountWidth = printSettings.amountWidth || Math.round(widthMm * 0.22);
+  const amountHeight = printSettings.amountHeight || 13;
   const amountFontSize = printSettings.amountFontSize || 13.5;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+    <div className="fixed inset-0 z-50 bg-slate-900/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
       
-      {/* CSS الخاص بالطباعة الدقيقة على الشيك المعتمد مقاس 18 سم × 9 سم (180mm × 90mm) */}
+      {/* CSS الخاص بالطباعة الديناميكية الدقيقة حسب أبعاد الشيك المحددة بالسنتيمتر/الملليمتر */}
       <style>{`
         @media print {
           @page {
-            size: 180mm 90mm;
-            margin: 0mm;
+            size: ${widthMm}mm ${heightMm}mm;
+            margin: 0mm !important;
           }
           html, body {
             margin: 0 !important;
             padding: 0 !important;
-            width: 180mm !important;
-            height: 90mm !important;
+            width: ${widthMm}mm !important;
+            height: ${heightMm}mm !important;
             background: #fff !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -139,53 +190,74 @@ export function CbkChequePrint({
             position: fixed !important;
             left: 0 !important;
             top: 0 !important;
-            width: 180mm !important;
-            height: 90mm !important;
+            width: ${widthMm}mm !important;
+            height: ${heightMm}mm !important;
             margin: 0 !important;
             padding: 0 !important;
             border: none !important;
             box-shadow: none !important;
-            background: transparent !important;
-            background-image: none !important;
+            background: ${printWithBackground ? '#fff' : 'transparent'} !important;
             overflow: hidden !important;
           }
           .screen-only-guide {
-            display: none !important;
-            opacity: 0 !important;
+            display: ${printWithBackground ? 'block' : 'none'} !important;
+            visibility: ${printWithBackground ? 'visible' : 'hidden'} !important;
           }
         }
       `}</style>
 
-      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-4 print:my-0 print:border-none print:shadow-none print:w-auto">
+      <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-4 print:my-0 print:border-none print:shadow-none print:w-auto">
         
-        {/* الشريط العلوي للتحكم المباشر بالطباعة */}
+        {/* Top Control Bar */}
         <div className="bg-slate-900 text-white p-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">
-              CBK
+              <Landmark className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-base font-black">
-                  معاينة وطباعة شيك البنك التجاري الكويتي
+                  معاينة وطباعة شيك {bankAccount.bankName}
                 </h3>
                 <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full font-mono">
                   #{cheque.chequeNumberStr}
                 </span>
-                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 font-mono font-bold">
-                  أبعاد معتمدة: 180mm × 90mm (18cm × 9cm)
+                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-500/40 font-mono font-bold flex items-center gap-1">
+                  <Ruler className="w-3 h-3" />
+                  <span>{widthCm} × {heightCm} سم ({widthMm} × {heightMm} مم)</span>
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {bankAccount.accountName} - الحساب: <span className="font-mono text-slate-300">{bankAccount.accountNumber}</span>
+              <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                {bankAccount.accountName} - الحساب: {bankAccount.accountNumber}
               </p>
             </div>
           </div>
 
-          {/* أزرار الإجراءات الفورية */}
+          {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             
-            {/* اختيار لغة التفقيط */}
+            {/* Multiple Template / Cheque Size Selector if more than 1 available */}
+            {templates.length > 1 && (
+              <div className="bg-slate-800 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-700">
+                <span className="px-2 text-slate-400 flex items-center gap-1 text-[11px]">
+                  <Layers className="w-3.5 h-3.5 text-purple-400" />
+                  <span>المقاس:</span>
+                </span>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="bg-slate-900 text-white text-xs font-bold p-1 rounded-lg border border-slate-600 focus:outline-none"
+                >
+                  {templates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name} ({tpl.widthCm}×{tpl.heightCm} سم)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Tafqeet Language */}
             <div className="bg-slate-800 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-700">
               <span className="px-2 text-slate-400 flex items-center gap-1 text-[11px]">
                 <Languages className="w-3.5 h-3.5 text-amber-400" />
@@ -215,7 +287,7 @@ export function CbkChequePrint({
               </button>
             </div>
 
-            {/* زر سند الصرف والمظروف */}
+            {/* Receipt & Envelope Voucher Button */}
             <button
               type="button"
               onClick={() => setIsReceiptModalOpen(true)}
@@ -226,7 +298,7 @@ export function CbkChequePrint({
               <span>سند الصرف والمظروف</span>
             </button>
 
-            {/* زر الطباعة الفورية المباشر */}
+            {/* Direct Print Button */}
             <button
               type="button"
               onClick={handlePrint}
@@ -236,7 +308,7 @@ export function CbkChequePrint({
               <span>طباعة الشيك فورياً</span>
             </button>
 
-            {/* زر الإغلاق */}
+            {/* Close Button */}
             {onClose && (
               <button
                 type="button"
@@ -250,8 +322,8 @@ export function CbkChequePrint({
           </div>
         </div>
 
-        {/* ملخص الشيك السريع */}
-        <div className="bg-slate-100 border-b border-slate-200 px-5 py-2.5 flex flex-wrap items-center justify-between text-xs text-slate-700 gap-2 print:hidden">
+        {/* Quick Cheque Summary & Mode Options */}
+        <div className="bg-slate-100 border-b border-slate-200 px-5 py-2.5 flex flex-wrap items-center justify-between text-xs text-slate-700 gap-3 print:hidden">
           <div className="flex items-center gap-4 flex-wrap">
             <div>
               <span className="text-slate-500">المستفيد: </span>
@@ -264,52 +336,110 @@ export function CbkChequePrint({
             <div>
               <span className="text-slate-500">المبلغ: </span>
               <strong className="text-emerald-800 font-mono font-black text-sm">
-                {cheque.amount.toFixed(3)} د.ك
+                {formatChequeAmount(cheque.amount)} د.ك
               </strong>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 text-[11px] text-slate-500">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            <span>تلقيم مباشر للطابعة بأبعاد 180 مم × 90 مم</span>
+          {/* Print Modes & Visual Helpers */}
+          <div className="flex items-center gap-3 flex-wrap">
+            
+            {/* Toggle Background on Print */}
+            <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 text-[11px] bg-white px-2.5 py-1 rounded-lg border border-slate-300">
+              <input
+                type="checkbox"
+                checked={printWithBackground}
+                onChange={(e) => setPrintWithBackground(e.target.checked)}
+                className="w-3.5 h-3.5 text-blue-600 rounded"
+              />
+              <span>طباعة الشيك بالكامل مع الستامب</span>
+            </label>
+
+            {/* Toggle Screen Background */}
+            <button
+              type="button"
+              onClick={() => setShowScreenBackground(!showScreenBackground)}
+              className="flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white px-2.5 py-1 rounded-lg border border-slate-300 transition"
+              title="إظهار أو إخفاء صورة الستامب في المعاينة"
+            >
+              {showScreenBackground ? <Eye className="w-3.5 h-3.5 text-blue-600" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{showScreenBackground ? 'إخفاء ستامب المعاينة' : 'إظهار ستامب المعاينة'}</span>
+            </button>
+
+            {/* Crossing Lines Toggle */}
+            <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 text-[11px] bg-white px-2.5 py-1 rounded-lg border border-slate-300">
+              <input
+                type="checkbox"
+                checked={isCrossed}
+                onChange={(e) => setIsCrossed(e.target.checked)}
+                className="w-3.5 h-3.5 text-amber-600 rounded"
+              />
+              <span>تسطير (للمستفيد الأول فقط)</span>
+            </label>
           </div>
         </div>
 
-        {/* حاوية الشيك بدقة 180mm × 90mm */}
+        {/* Cheque Container Scaled to User cm Dimensions */}
         <div className="p-4 sm:p-8 bg-slate-200 flex flex-col items-center justify-center overflow-x-auto print:p-0 print:bg-transparent print:m-0">
           
           <div 
             id="cbk-print-wrapper"
             style={{
-              width: '180mm',
-              height: '90mm',
+              width: `${widthMm}mm`,
+              height: `${heightMm}mm`,
               maxWidth: '100%',
-              aspectRatio: '180 / 90',
+              aspectRatio: `${widthMm} / ${heightMm}`,
             }}
             className="relative select-none box-border shadow-xl rounded-sm border border-slate-300 print:shadow-none print:border-none print:rounded-none overflow-hidden bg-white cheque-print-exact"
           >
 
-            {/* 1. خلفية الشيك البنكي الحقيقية (للشاشة فقط ومخفية في الطباعة على شيك فعلي) */}
-            <div className="absolute inset-0 pointer-events-none select-none screen-only-guide print:hidden z-0">
-              <img
-                src={printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg'}
-                alt="خلفية الشيك البنكي CBK"
-                className="w-full h-full object-fill opacity-90"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/cbk_cheque_template.jpg';
+            {/* 1. Scanned Stamp Background Image (Hidden when printing text-only on physical cheque) */}
+            {stampImageUrl && showScreenBackground && (
+              <div className="absolute inset-0 pointer-events-none select-none screen-only-guide z-0">
+                <img
+                  src={stampImageUrl}
+                  alt={`ستامب شيك ${bankAccount.bankName}`}
+                  className="w-full h-full object-fill opacity-90"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Background Placeholder if no image is uploaded and user is previewing */}
+            {!stampImageUrl && showScreenBackground && (
+              <div className="absolute inset-0 pointer-events-none select-none screen-only-guide z-0 border-2 border-dashed border-slate-300 bg-amber-50/20 flex flex-col items-center justify-center text-slate-400 p-4">
+                <span className="text-xs font-bold font-mono">
+                  ستامب شيك {bankAccount.bankName} - المقاس: {widthCm} × {heightCm} سم
+                </span>
+                <span className="text-[10px] text-slate-400 mt-1">
+                  (يمكنك رفع صورة الشيك من شاشة الحسابات البنكية لضبط المعاينة بدقة)
+                </span>
+              </div>
+            )}
+
+            {/* 2. Crossing Lines ("A/C PAYEE ONLY") */}
+            {isCrossed && (
+              <div 
+                style={{
+                  position: 'absolute',
+                  left: '12mm',
+                  top: '6mm',
+                  width: '42mm',
+                  height: '16mm',
                 }}
-              />
-            </div>
+                className="z-10 pointer-events-none"
+              >
+                <div className="w-full border-t-2 border-slate-900 transform -rotate-12 translate-y-1" />
+                <div className="text-[9px] font-black tracking-widest text-slate-900 text-center transform -rotate-12 py-0.5 uppercase">
+                  A/C PAYEE ONLY
+                </div>
+                <div className="w-full border-t-2 border-slate-900 transform -rotate-12 -translate-y-1" />
+              </div>
+            )}
 
-            {/* ===================================================================== */}
-            {/* الحقول الأربعة المطبوعة على الشيك (المحسوبة وفق أبعاد 180mm × 90mm):     */}
-            {/* 1. التاريخ                                                           */}
-            {/* 2. اسم المستفيد                                                       */}
-            {/* 3. التفقيط                                                           */}
-            {/* 4. المبلغ رقماً محصوراً بـ #                                         */}
-            {/* ===================================================================== */}
-
-            {/* 1. التاريخ */}
+            {/* 3. Date */}
             <div 
               style={{
                 position: 'absolute',
@@ -326,7 +456,7 @@ export function CbkChequePrint({
               </span>
             </div>
 
-            {/* 2. اسم المستفيد (يبدأ من جهة اليمين عند ادفعوا لأمر) */}
+            {/* 4. Payee Name */}
             <div 
               style={{
                 position: 'absolute',
@@ -344,7 +474,7 @@ export function CbkChequePrint({
               </span>
             </div>
 
-            {/* 3. التفقيط (يبدأ من جهة اليمين عند مبلغ وقدره، ويلتف على سطرين عند الزيادة) */}
+            {/* 5. Amount in Words (Tafqeet) */}
             <div 
               style={{
                 position: 'absolute',
@@ -365,7 +495,7 @@ export function CbkChequePrint({
               </span>
             </div>
 
-            {/* 4. المبلغ بالأرقام (# 0.000 #) داخل مربع د.ك على جهة اليسار */}
+            {/* 6. Amount in Digits */}
             <div 
               style={{
                 position: 'absolute',
@@ -384,34 +514,74 @@ export function CbkChequePrint({
 
           </div>
 
-          {/* تنبيه وشريط التوجيه لمعايرة الشيك */}
-          <div className="mt-4 bg-white border border-slate-300 p-3 rounded-xl max-w-2xl w-full text-xs text-slate-700 print:hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-xs">
+          {/* Calibration Navigation & Fine Tuning Bar */}
+          <div className="mt-4 bg-white border border-slate-300 p-3.5 rounded-2xl max-w-3xl w-full text-xs text-slate-700 print:hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>
-                تتم الطباعة المباشرة بالأبعاد المعتمدة <strong>180mm × 90mm</strong> وفق المعايرة المحفوظة.
+                تتم الطباعة المباشرة بأبعاد الشيك المعتمدة: <strong className="font-mono">{widthCm} سم × {heightCm} سم</strong> ({widthMm} × {heightMm} مم).
               </span>
             </div>
-            {onNavigateToCalibration && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (onClose) onClose();
-                  onNavigateToCalibration();
-                }}
-                className="text-amber-700 hover:text-amber-900 font-bold flex items-center gap-1 text-[11px] underline flex-shrink-0"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>تعديل المعايرة والمقاسات</span>
-              </button>
-            )}
+
+            {/* Quick Offset Nudges */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-500 font-bold">محاذاة فورية:</span>
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setFineOffsetY((prev) => prev - 1)}
+                  className="p-1 hover:bg-white rounded transition text-slate-700"
+                  title="تحريك لأعلى 1 مم"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFineOffsetY((prev) => prev + 1)}
+                  className="p-1 hover:bg-white rounded transition text-slate-700"
+                  title="تحريك لأسفل 1 مم"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFineOffsetX((prev) => prev - 1)}
+                  className="p-1 hover:bg-white rounded transition text-slate-700"
+                  title="تحريك لليسار 1 مم"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFineOffsetX((prev) => prev + 1)}
+                  className="p-1 hover:bg-white rounded transition text-slate-700"
+                  title="تحريك لليمين 1 مم"
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {onNavigateToCalibration && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onClose) onClose();
+                    onNavigateToCalibration();
+                  }}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>معايرة متقدمة</span>
+                </button>
+              )}
+            </div>
           </div>
 
         </div>
 
       </div>
 
-      {/* نافذة طباعة سند الصرف والإيصال والمظروف */}
+      {/* Cheque Receipt and Envelope Voucher Modal */}
       <ChequeReceiptAndEnvelopeModal
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}

@@ -42,6 +42,14 @@ export const INITIAL_BENEFICIARY_CATEGORIES: BeneficiaryCategory[] = [
   { id: 'individual', name: 'أفراد وملاك عقارات', color: 'slate', description: 'إيجارات العقارات، ملاك المنشآت، أفراد' },
 ];
 
+export const STANDARD_CHEQUE_SIZES = [
+  { id: 'size-cbk-std', name: 'شيك تجاري قياسي كويتي (CBK)', widthCm: 18.0, heightCm: 9.0, desc: 'المقاس الكويتي القياسي المعتمد 180×90 مم' },
+  { id: 'size-intl-std', name: 'شيك أعمال قياسي دولي', widthCm: 21.0, heightCm: 8.5, desc: 'المقاس الشائع للشركات والمؤسسات 210×85 مم' },
+  { id: 'size-corp-wide', name: 'شيك شركات عريض مع كعب', widthCm: 23.5, heightCm: 9.0, desc: 'شيكات الشركات الكبرى والمقاولات 235×90 مم' },
+  { id: 'size-mid-pay', name: 'شيك مصرفي متوسط (NBK / KFH)', widthCm: 20.0, heightCm: 8.5, desc: 'مقاس الشيكات الشخصية والتجارية المتوسطة 200×85 مم' },
+  { id: 'size-pocket', name: 'شيك جيب للأفراد', widthCm: 17.5, heightCm: 7.5, desc: 'دفاتر الشيكات الصغيرة الخاصة بالأفراد 175×75 مم' },
+];
+
 export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
   {
     id: 'acc-cbk-main',
@@ -56,6 +64,31 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     isDefault: true,
     status: 'active',
     chequeTemplate: 'CBK',
+    chequeWidthCm: 18.0,
+    chequeHeightCm: 9.0,
+    chequeImageUrl: '/src/assets/images/cbk_cheque_bg_1789993769401.jpg',
+    chequeImageName: 'cbk_official_stamp.jpg',
+    activeTemplateId: 'tpl-cbk-std',
+    chequeTemplates: [
+      {
+        id: 'tpl-cbk-std',
+        name: 'شيك تجاري قياسي CBK (18.0 × 9.0 سم)',
+        widthCm: 18.0,
+        heightCm: 9.0,
+        chequeImageUrl: '/src/assets/images/cbk_cheque_bg_1789993769401.jpg',
+        chequeImageName: 'cbk_official_stamp.jpg',
+        isDefault: true,
+        notes: 'الستامب المعتمد للشيكات التشغيلية اليومية',
+      },
+      {
+        id: 'tpl-cbk-corp',
+        name: 'شيك شركات عريض CBK Corporate (23.5 × 9.0 سم)',
+        widthCm: 23.5,
+        heightCm: 9.0,
+        isDefault: false,
+        notes: 'دفتر شيكات الشركات الكبرى للمقاولات والمشاريع الكبيرة',
+      },
+    ],
     createdAt: '2026-01-01',
   },
   {
@@ -71,6 +104,27 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     isDefault: false,
     status: 'active',
     chequeTemplate: 'NBK',
+    chequeWidthCm: 20.0,
+    chequeHeightCm: 8.5,
+    activeTemplateId: 'tpl-nbk-std',
+    chequeTemplates: [
+      {
+        id: 'tpl-nbk-std',
+        name: 'شيك الوطني القياسي NBK (20.0 × 8.5 سم)',
+        widthCm: 20.0,
+        heightCm: 8.5,
+        isDefault: true,
+        notes: 'المقاس القياسي المعتمد لحسابات المشاريع',
+      },
+      {
+        id: 'tpl-nbk-pay',
+        name: 'شيك أوامر الدفع NBK (21.0 × 8.5 سم)',
+        widthCm: 21.0,
+        heightCm: 8.5,
+        isDefault: false,
+        notes: 'شيكات الدفع التجاري والتحويلات الخارجية',
+      },
+    ],
     createdAt: '2026-01-15',
   },
   {
@@ -86,6 +140,27 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     isDefault: false,
     status: 'active',
     chequeTemplate: 'KFH',
+    chequeWidthCm: 21.0,
+    chequeHeightCm: 8.5,
+    activeTemplateId: 'tpl-kfh-std',
+    chequeTemplates: [
+      {
+        id: 'tpl-kfh-std',
+        name: 'شيك بيتك القياسي KFH (21.0 × 8.5 سم)',
+        widthCm: 21.0,
+        heightCm: 8.5,
+        isDefault: true,
+        notes: 'دفتر شيكات بيت التمويل للتوريدات العامة',
+      },
+      {
+        id: 'tpl-kfh-corp',
+        name: 'شيك رواتب وشركات KFH (23.0 × 9.0 سم)',
+        widthCm: 23.0,
+        heightCm: 9.0,
+        isDefault: false,
+        notes: 'المقاس العريض لمدفوعات الرواتب وكبار الموردين',
+      },
+    ],
     createdAt: '2026-02-01',
   },
 ];

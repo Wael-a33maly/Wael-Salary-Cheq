@@ -12,7 +12,8 @@ import { SettingsView } from './components/SettingsView';
 import { HostingerGuideModal } from './components/HostingerGuideModal';
 import { LoginView } from './components/LoginView';
 import { ChequePrintingModule } from './components/cheques/ChequePrintingModule';
-import { INITIAL_ISSUED_CHEQUES } from './mockCheques';
+import { INITIAL_ISSUED_CHEQUES, INITIAL_BANK_ACCOUNTS } from './mockCheques';
+import { BankReconciliationView } from './components/reconciliation/BankReconciliationView';
 import { 
   INITIAL_SETTINGS, 
   INITIAL_BRANCHES, 
@@ -420,6 +421,12 @@ export default function App() {
               users={users}
               branches={branches}
               onAddUser={handleAddUser}
+            />
+          )}
+
+          {activeTab === 'reconciliation' && (
+            <BankReconciliationView
+              currentUserName={currentUser?.fullName || 'المسؤول العام'}
             />
           )}
 
