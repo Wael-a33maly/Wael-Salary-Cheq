@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Landmark,
   FileSpreadsheet,
@@ -27,7 +27,8 @@ import {
   BookOpen,
   ArrowUpDown,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Database
 } from 'lucide-react';
 import {
   BankStatementTransaction,
@@ -54,6 +55,7 @@ import {
   downloadSampleBankExcel,
   downloadSampleAppExcel
 } from '../../utils/reconciliationExport';
+import { dbService } from '../../services/apiService';
 import { ExcelImportModal } from './ExcelImportModal';
 import { JournalEntryModal } from './JournalEntryModal';
 import { ReconciliationSettingsModal } from './ReconciliationSettingsModal';
@@ -147,6 +149,12 @@ export function BankReconciliationView({
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Database connection & live sync status
+  const [dbConnected, setDbConnected] = useState<boolean>(false);
+  const [dbSyncMessage, setDbSyncMessage] = useState<string>('جاري فحص الاتصال بقاعدة بيانات MySQL...');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+
   // UI Flow Stages (1 through 7)
   const [currentStage, setCurrentStage] = useState<number>(1);
 
@@ -163,7 +171,53 @@ export function BankReconciliationView({
   const [diffSearchQuery, setDiffSearchQuery] = useState<string>('');
   const [mainViewSubTab, setMainViewSubTab] = useState<'all' | 'differences' | 'matched' | 'import_center' | 'statement' | 'report'>('all');
 
-  // Save to localStorage when updated
+  // مزامنة البيانات تلقائياً مع خادم وقاعدة بيانات MySQL عند فتح الصفحة أو تبديل الجلسة
+  const syncWithDatabase = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const status = await dbService.checkConnection();
+      setDbConnected(status.isConnected);
+      setDbSyncMessage(status.message);
+
+      if (status.isConnected) {
+        setLastSyncTime(new Date().toLocaleTimeString('ar-KW'));
+        const data = await dbService.fetchBootstrapData();
+        if (data) {
+          if (data.reconciliationSettings) {
+            setSettings(data.reconciliationSettings);
+          }
+          if (data.reconciliationSessions && data.reconciliationSessions.length > 0) {
+            setSessions(data.reconciliationSessions);
+          }
+        }
+
+        // جلب حركات الجلسة المحددة من MySQL
+        const details = await dbService.fetchSessionDetailsFromDb(activeSessionId);
+        if (details) {
+          if (details.bankTransactions && details.bankTransactions.length > 0) {
+            setBankTransactions(details.bankTransactions);
+          }
+          if (details.ledgerTransactions && details.ledgerTransactions.length > 0) {
+            setAccountingTransactions(details.ledgerTransactions);
+          }
+          if (details.differences && details.differences.length > 0) {
+            setDifferences(details.differences);
+          }
+        }
+        setDbSyncMessage('مربوط بقاعدة بيانات MySQL المركزية على الدومين (مزامنة فورية)');
+      }
+    } catch (err) {
+      console.warn('Reconciliation DB sync error:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    syncWithDatabase();
+  }, [syncWithDatabase]);
+
+  // Save to localStorage when updated & push to MySQL
   const saveStateToStorage = () => {
     localStorage.setItem('app_rec_standalone_bank_name', standaloneBankName);
     localStorage.setItem('app_rec_standalone_acc_num', standaloneAccountNumber);
@@ -174,6 +228,22 @@ export function BankReconciliationView({
     localStorage.setItem(`app_rec_jvs_${activeSessionId}`, JSON.stringify(journalEntries));
     localStorage.setItem('app_rec_settings', JSON.stringify(settings));
     localStorage.setItem('app_rec_permissions', JSON.stringify(permissions));
+
+    // حفظ فوري في قاعدة بيانات MySQL على الخادم / الدومين
+    if (activeSession) {
+      dbService.saveReconciliationSessionToDb(
+        activeSession,
+        bankTransactions,
+        accountingTransactions,
+        differences,
+        journalEntries
+      ).then((saved) => {
+        if (saved) {
+          setLastSyncTime(new Date().toLocaleTimeString('ar-KW'));
+          setDbConnected(true);
+        }
+      });
+    }
   };
 
   // Re-calculate Summary
@@ -400,6 +470,43 @@ export function BankReconciliationView({
   return (
     <div className="space-y-6 pb-16 print:p-0 print:m-0" dir="rtl">
       
+      {/* شريط حالة الاتصال والمزامنة الفورية بقاعدة بيانات MySQL على الدومين */}
+      <div className={`p-3.5 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs font-sans print:hidden shadow-2xs transition ${
+        dbConnected 
+          ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950' 
+          : 'bg-slate-50 border-slate-200 text-slate-700'
+      }`}>
+        <div className="flex items-center gap-3">
+          <span className={`w-3 h-3 rounded-full shrink-0 ${dbConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
+          <div className="flex items-center gap-2">
+            <Database className={`w-4 h-4 ${dbConnected ? 'text-emerald-600' : 'text-slate-500'}`} />
+            <span className="font-bold">
+              {dbConnected ? '🟢 متصل بقاعدة بيانات MySQL المركزية على الدومين (مزامنة فورية لكافة الحركات والتسويات)' : '💾 وضع التخزين المحلي (تلقائي)'}
+            </span>
+            <span className="text-[11px] text-slate-500 hidden md:inline">
+              — {dbSyncMessage}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastSyncTime && (
+            <span className="text-[11px] text-slate-500 font-mono">
+              آخر مزامنة: {lastSyncTime}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={syncWithDatabase}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl border border-slate-300 shadow-2xs transition text-[11px] disabled:opacity-50"
+            title="مزامنة فورية مع قاعدة بيانات MySQL"
+          >
+            <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+            <span>{isSyncing ? 'جاري المزامنة...' : 'مزامنة مع MySQL'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Top Banner / Session Header */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 print:hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">

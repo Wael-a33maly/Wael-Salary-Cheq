@@ -30,13 +30,14 @@ import {
   Upload,
   Trash2
 } from 'lucide-react';
-import { ChequePrintSettings } from '../../types';
+import { ChequePrintSettings, BankAccount, ChequeSizeTemplate } from '../../types';
 import { DEFAULT_PRINT_SETTINGS } from '../../mockCheques';
 import { formatChequeAmount } from '../../utils/tafqeetKwd';
 
 interface ChequeCalibrationTabProps {
   printSettings: ChequePrintSettings;
   onUpdatePrintSettings: (settings: ChequePrintSettings) => void;
+  bankAccounts?: BankAccount[];
 }
 
 type SelectedField = 'all' | 'date' | 'payee' | 'words' | 'amount';
@@ -64,7 +65,54 @@ export const CBK_CHEQUE_BASE_COORDS = {
 export function ChequeCalibrationTab({
   printSettings,
   onUpdatePrintSettings,
+  bankAccounts,
 }: ChequeCalibrationTabProps) {
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(bankAccounts?.[0]?.id || '');
+  const activeAccount = bankAccounts?.find((a) => a.id === selectedAccountId) || bankAccounts?.[0];
+  const templates: ChequeSizeTemplate[] = activeAccount?.chequeTemplates && activeAccount.chequeTemplates.length > 0
+    ? activeAccount.chequeTemplates
+    : [
+        {
+          id: `tpl-${activeAccount?.id || 'std'}-std`,
+          name: `المقاس المعتمد (${activeAccount?.chequeWidthCm || 18.0} × ${activeAccount?.chequeHeightCm || 9.0} سم)`,
+          widthCm: activeAccount?.chequeWidthCm || 18.0,
+          heightCm: activeAccount?.chequeHeightCm || 9.0,
+          chequeImageUrl: activeAccount?.chequeImageUrl,
+          chequeImageName: activeAccount?.chequeImageName,
+          isDefault: true,
+        }
+      ];
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+    activeAccount?.activeTemplateId || templates[0]?.id || ''
+  );
+
+  useEffect(() => {
+    if (activeAccount) {
+      const accTemplates = activeAccount.chequeTemplates && activeAccount.chequeTemplates.length > 0
+        ? activeAccount.chequeTemplates
+        : [
+            {
+              id: `tpl-${activeAccount.id}-std`,
+              name: `المقاس المعتمد (${activeAccount.chequeWidthCm || 18.0} × ${activeAccount.chequeHeightCm || 9.0} سم)`,
+              widthCm: activeAccount.chequeWidthCm || 18.0,
+              heightCm: activeAccount.chequeHeightCm || 9.0,
+              chequeImageUrl: activeAccount.chequeImageUrl,
+              chequeImageName: activeAccount.chequeImageName,
+              isDefault: true,
+            }
+          ];
+      setSelectedTemplateId(activeAccount.activeTemplateId || accTemplates[0]?.id || '');
+    }
+  }, [selectedAccountId, activeAccount]);
+
+  const activeTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
+  const calibWidthCm = activeTemplate?.widthCm || activeAccount?.chequeWidthCm || 18.0;
+  const calibHeightCm = activeTemplate?.heightCm || activeAccount?.chequeHeightCm || 9.0;
+  const calibWidthMm = Math.round(calibWidthCm * 10);
+  const calibHeightMm = Math.round(calibHeightCm * 10);
+  const calibChequeImage = activeTemplate?.chequeImageUrl || activeAccount?.chequeImageUrl || printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg';
+
   const [calibration, setCalibration] = useState<ChequePrintSettings>(printSettings);
   const [selectedField, setSelectedField] = useState<SelectedField>('payee');
   const [stepSize, setStepSize] = useState<number>(0.5); // mm
@@ -580,11 +628,11 @@ export function ChequeCalibrationTab({
 
   const currentFieldInfo = getFieldInfo(selectedField);
 
-  // Percentage conversion helpers for 180mm x 90mm canvas
-  const toLeftPct = (mm: number) => (mm / 180) * 100;
-  const toTopPct = (mm: number) => (mm / 90) * 100;
-  const toWidthPct = (mm: number) => (mm / 180) * 100;
-  const toHeightPct = (mm: number) => (mm / 90) * 100;
+  // Percentage conversion helpers for dynamic canvas dimensions
+  const toLeftPct = (mm: number) => (mm / calibWidthMm) * 100;
+  const toTopPct = (mm: number) => (mm / calibHeightMm) * 100;
+  const toWidthPct = (mm: number) => (mm / calibWidthMm) * 100;
+  const toHeightPct = (mm: number) => (mm / calibHeightMm) * 100;
 
   return (
     <div className="space-y-6 pb-12">
@@ -597,19 +645,61 @@ export function ChequeCalibrationTab({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-black text-slate-900">
-                معايرة مقاسات وأبعاد حقول الشيك (18cm × 9cm)
+                معايرة مقاسات وأبعاد حقول الشيك ({calibWidthCm}cm × {calibHeightCm}cm)
               </h2>
               <span className="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2.5 py-0.5 rounded-full border border-emerald-300">
-                180mm × 90mm دقة مليمترية
+                {calibWidthMm}mm × {calibHeightMm}mm دقة مليمترية
               </span>
               <span className="bg-amber-100 text-amber-900 text-[11px] font-bold px-2 py-0.5 rounded border border-amber-300">
-                البنك التجاري CBK
+                {activeAccount?.bankName || 'البنك التجاري CBK'}
               </span>
+              {activeTemplate && (
+                <span className="bg-blue-100 text-blue-900 text-[11px] font-bold px-2 py-0.5 rounded border border-blue-300">
+                  {activeTemplate.name}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
               يمكنك سحب وإفلات أي حقل لضبط موقعه، أو سحب مقابض الزوايا لتغيير أبعاد العرض والارتفاع بدقة مليمترية، أو استخدام لوحة التحكم الجانبية.
               بعد الحفظ، ستتم طباعة أي شيك مباشرة على الطابعة وفق هذه المقاسات بدون أي إعدادات.
             </p>
+
+            {/* Bank and Template Quick Selectors if multiple exist */}
+            {bankAccounts && bankAccounts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-600">الحساب البنكي:</span>
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-slate-800"
+                  >
+                    {bankAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.bankName} - {acc.accountName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {templates.length > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-600">القالب / المقاس:</span>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(e) => setSelectedTemplateId(e.target.value)}
+                      className="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-slate-800"
+                    >
+                      {templates.map((tpl) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name} ({tpl.widthCm}×{tpl.heightCm} سم)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -897,7 +987,7 @@ export function ChequeCalibrationTab({
                   onPointerUp={handlePointerUp}
                   className="relative select-none shadow-md bg-white border border-slate-300 flex-1 overflow-hidden"
                   style={{
-                    aspectRatio: '180 / 90',
+                    aspectRatio: `${calibWidthMm} / ${calibHeightMm}`,
                     position: 'relative',
                     backgroundColor: '#ffffff',
                   }}
@@ -908,8 +998,8 @@ export function ChequeCalibrationTab({
                   {bgViewMode === 'scanned' ? (
                     <div className="absolute inset-0 pointer-events-none select-none z-0">
                       <img
-                        src={calibration.customChequeImageUrl || '/cbk_cheque_bg.jpg'}
-                        alt="خلفية الشيك البنكي التجاري CBK"
+                        src={calibChequeImage}
+                        alt={`خلفية شيك ${activeAccount?.bankName || 'CBK'}`}
                         className="w-full h-full object-fill pointer-events-none select-none"
                         style={{ opacity: bgOpacity / 100 }}
                         onError={(e) => {

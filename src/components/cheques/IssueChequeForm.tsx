@@ -63,6 +63,25 @@ export function IssueChequeForm({
   // Today date format
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // Cheque templates for this bank account (supporting multiple sizes)
+  const templates: ChequeSizeTemplate[] = activeAccount?.chequeTemplates && activeAccount.chequeTemplates.length > 0
+    ? activeAccount.chequeTemplates
+    : [
+        {
+          id: `tpl-${activeAccount?.id || 'std'}-default`,
+          name: `المقاس المعتمد (${activeAccount?.chequeWidthCm || 18.0} × ${activeAccount?.chequeHeightCm || 9.0} سم)`,
+          widthCm: activeAccount?.chequeWidthCm || 18.0,
+          heightCm: activeAccount?.chequeHeightCm || 9.0,
+          chequeImageUrl: activeAccount?.chequeImageUrl,
+          chequeImageName: activeAccount?.chequeImageName,
+          isDefault: true,
+        }
+      ];
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+    activeAccount?.activeTemplateId || templates[0]?.id || ''
+  );
+
   // Form State
   const [selectedBookId, setSelectedBookId] = useState<string>(activeBook?.id || '');
   const [chequeSerial, setChequeSerial] = useState<number>(activeBook?.currentSerial || 100001);
@@ -142,7 +161,31 @@ export function IssueChequeForm({
       setSelectedBookId(books[0].id);
       setChequeSerial(books[0].currentSerial);
     }
-  }, [effectiveAccountId, chequeBooks]);
+    if (activeAccount) {
+      const accTemplates = activeAccount.chequeTemplates && activeAccount.chequeTemplates.length > 0
+        ? activeAccount.chequeTemplates
+        : [
+            {
+              id: `tpl-${activeAccount.id}-std`,
+              name: `المقاس المعتمد (${activeAccount.chequeWidthCm || 18.0} × ${activeAccount.chequeHeightCm || 9.0} سم)`,
+              widthCm: activeAccount.chequeWidthCm || 18.0,
+              heightCm: activeAccount.chequeHeightCm || 9.0,
+              chequeImageUrl: activeAccount.chequeImageUrl,
+              chequeImageName: activeAccount.chequeImageName,
+              isDefault: true,
+            }
+          ];
+      setSelectedTemplateId(activeAccount.activeTemplateId || accTemplates[0]?.id || '');
+    }
+  }, [effectiveAccountId, chequeBooks, activeAccount]);
+
+  // Active Template & Dynamic Dimensions
+  const currentTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
+  const currentWidthCm = currentTemplate?.widthCm || activeAccount?.chequeWidthCm || 18.0;
+  const currentHeightCm = currentTemplate?.heightCm || activeAccount?.chequeHeightCm || 9.0;
+  const currentWidthMm = Math.round(currentWidthCm * 10);
+  const currentHeightMm = Math.round(currentHeightCm * 10);
+  const currentChequeImage = currentTemplate?.chequeImageUrl || activeAccount?.chequeImageUrl || printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg';
 
   // Synchronize when book changes
   useEffect(() => {
@@ -187,7 +230,7 @@ export function IssueChequeForm({
     setAmountInWords(tafqeetLang === 'en' ? tafqeetKwdEn(amount) : tafqeetKwd(amount));
   };
 
-  // Calculated dynamic coordinates from calibration / printSettings for the live 180mm x 90mm preview
+  // Calculated dynamic coordinates from calibration / printSettings for live preview
   const previewDateLeft = Math.round((CBK_CHEQUE_BASE_COORDS.date.left + (printSettings.offsetX || 0) + (printSettings.dateOffsetX || 0)) * 10) / 10;
   const previewDateTop = Math.round((CBK_CHEQUE_BASE_COORDS.date.top + (printSettings.offsetY || 0) + (printSettings.dateOffsetY || 0)) * 10) / 10;
   const previewDateWidth = Math.round((printSettings.dateWidth ?? CBK_CHEQUE_BASE_COORDS.date.width) * 10) / 10;
@@ -234,6 +277,10 @@ export function IssueChequeForm({
       bearerCrossed: false,
       purpose: purpose.trim(),
       notes: notes.trim(),
+      templateId: currentTemplate?.id,
+      templateName: currentTemplate?.name,
+      chequeWidthCm: currentWidthCm,
+      chequeHeightCm: currentHeightCm,
       createdBy: 'admin',
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
     };
@@ -336,7 +383,7 @@ export function IssueChequeForm({
           <div className="space-y-3.5 text-xs">
             
             {/* Cheque Book and Serial Number */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">دفتر الشيكات النشط:</label>
                 <select
@@ -365,6 +412,30 @@ export function IssueChequeForm({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* قالب ومقاس الشيك */}
+            <div className="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-slate-800 font-bold flex items-center gap-1.5 text-xs">
+                  <Ruler className="w-3.5 h-3.5 text-amber-600" />
+                  <span>مقاس وقالب الشيك المعتمد:</span>
+                </label>
+                <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-lg border border-amber-200">
+                  {currentWidthCm} × {currentHeightCm} سم ({currentWidthMm} × {currentHeightMm} مم)
+                </span>
+              </div>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-bold text-slate-800 focus:ring-2 focus:ring-amber-500"
+              >
+                {templates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name} — {tpl.widthCm} × {tpl.heightCm} سم
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Beneficiary Selection / Entry */}
@@ -566,31 +637,31 @@ export function IssueChequeForm({
           <div className="bg-slate-900 text-white p-3.5 rounded-2xl flex flex-wrap justify-between items-center gap-2">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-bold">معاينة حية ومباشرة لشيك البنك التجاري الكويتي (CBK)</span>
+              <span className="text-xs font-bold">معاينة حية ومباشرة لشيك {activeAccount.bankName}</span>
             </div>
             
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono text-emerald-400 font-bold bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
-                180mm × 90mm (18cm × 9cm)
+                {currentWidthCm} × {currentHeightCm} سم ({currentWidthMm} × {currentHeightMm} مم)
               </span>
             </div>
           </div>
 
-          {/* Cheque Graphic with Exact 180mm x 90mm (2:1) Aspect Ratio */}
+          {/* Cheque Graphic with Exact Dynamic Aspect Ratio */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto flex justify-center items-center">
             
             <div 
               style={{
-                width: '576px',
-                height: '288px',
-                aspectRatio: '180 / 90',
+                width: '100%',
+                maxWidth: '576px',
+                aspectRatio: `${currentWidthMm} / ${currentHeightMm}`,
               }}
               className="relative rounded-xl shadow-md select-none overflow-hidden border border-slate-300 bg-white"
             >
-              {/* صورة الشيك الفعلية (الأصلية أو المرفوعة من المستخدم) بمقاس 9*18 سم مضبوط تلقائياً */}
+              {/* صورة الشيك الفعلية (المخصصة أو الافتراضية) */}
               <img 
-                src={printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg'}
-                alt="شيك البنك التجاري الكويتي (CBK)"
+                src={currentChequeImage}
+                alt={`شيك ${activeAccount.bankName}`}
                 className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/cbk_cheque_template.jpg';
@@ -601,10 +672,10 @@ export function IssueChequeForm({
               <div 
                 className="absolute flex items-center justify-center font-mono font-black text-slate-950 tracking-widest z-10 overflow-hidden"
                 style={{
-                  left: `${(previewDateLeft / 180) * 100}%`,
-                  top: `${(previewDateTop / 90) * 100}%`,
-                  width: `${(previewDateWidth / 180) * 100}%`,
-                  height: `${(previewDateHeight / 90) * 100}%`,
+                  left: `${(previewDateLeft / currentWidthMm) * 100}%`,
+                  top: `${(previewDateTop / currentHeightMm) * 100}%`,
+                  width: `${(previewDateWidth / currentWidthMm) * 100}%`,
+                  height: `${(previewDateHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewDateFontSize}px`,
                 }}
                 title="التاريخ"
@@ -614,15 +685,15 @@ export function IssueChequeForm({
                 </span>
               </div>
 
-              {/* 2. حقل المستفيد PAYEE (يعرض بدقة في حيز الحقل) */}
+              {/* 2. حقل المستفيد PAYEE */}
               <div 
                 className="absolute flex items-center font-serif font-black text-slate-950 px-1 z-10 overflow-hidden"
                 dir="rtl"
                 style={{
-                  left: `${(previewPayeeLeft / 180) * 100}%`,
-                  top: `${(previewPayeeTop / 90) * 100}%`,
-                  width: `${(previewPayeeWidth / 180) * 100}%`,
-                  height: `${(previewPayeeHeight / 90) * 100}%`,
+                  left: `${(previewPayeeLeft / currentWidthMm) * 100}%`,
+                  top: `${(previewPayeeTop / currentHeightMm) * 100}%`,
+                  width: `${(previewPayeeWidth / currentWidthMm) * 100}%`,
+                  height: `${(previewPayeeHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewPayeeFontSize}px`,
                 }}
                 title="اسم المستفيد"
@@ -632,15 +703,15 @@ export function IssueChequeForm({
                 </span>
               </div>
 
-              {/* 3. حقل التفقيط WORDS (إذا زاد يتم وضعه على سطرين ولا يتعدى حيز الحقل) */}
+              {/* 3. حقل التفقيط WORDS */}
               <div 
                 className="absolute flex items-center font-sans font-bold text-slate-900 px-1 z-10 overflow-hidden"
                 dir="rtl"
                 style={{
-                  left: `${(previewWordsLeft / 180) * 100}%`,
-                  top: `${(previewWordsTop / 90) * 100}%`,
-                  width: `${(previewWordsWidth / 180) * 100}%`,
-                  height: `${(previewWordsHeight / 90) * 100}%`,
+                  left: `${(previewWordsLeft / currentWidthMm) * 100}%`,
+                  top: `${(previewWordsTop / currentHeightMm) * 100}%`,
+                  width: `${(previewWordsWidth / currentWidthMm) * 100}%`,
+                  height: `${(previewWordsHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewWordsFontSize}px`,
                 }}
                 title="المبلغ كتابة (التفقيط)"
@@ -653,14 +724,14 @@ export function IssueChequeForm({
                 </span>
               </div>
 
-              {/* 4. حقل المبلغ رقماً محصوراً بين علامتي # (KD Box) */}
+              {/* 4. حقل المبلغ رقماً */}
               <div 
                 className="absolute flex items-center justify-center font-mono font-black text-slate-950 z-10 overflow-hidden"
                 style={{
-                  left: `${(previewAmountLeft / 180) * 100}%`,
-                  top: `${(previewAmountTop / 90) * 100}%`,
-                  width: `${(previewAmountWidth / 180) * 100}%`,
-                  height: `${(previewAmountHeight / 90) * 100}%`,
+                  left: `${(previewAmountLeft / currentWidthMm) * 100}%`,
+                  top: `${(previewAmountTop / currentHeightMm) * 100}%`,
+                  width: `${(previewAmountWidth / currentWidthMm) * 100}%`,
+                  height: `${(previewAmountHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewAmountFontSize}px`,
                 }}
                 title="المبلغ رقماً"

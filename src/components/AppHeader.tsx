@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Bell, 
   AlertTriangle,
@@ -9,9 +9,12 @@ import {
   Landmark,
   Calendar,
   ArrowUpRight,
-  LayoutDashboard
+  LayoutDashboard,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 import { IssuedCheque } from '../types';
+import { dbService } from '../services/apiService';
 
 interface AppHeaderProps {
   activeTab: string;
@@ -40,6 +43,27 @@ export function AppHeader({
 }: AppHeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationTab, setNotificationTab] = useState<'cheques' | 'residency'>('cheques');
+  const [dbConnected, setDbConnected] = useState<boolean>(false);
+  const [dbStatusMessage, setDbStatusMessage] = useState<string>('جاري فحص الاتصال بقاعدة البيانات...');
+  const [isCheckingDb, setIsCheckingDb] = useState<boolean>(false);
+
+  const checkDb = async () => {
+    setIsCheckingDb(true);
+    try {
+      const res = await dbService.checkConnection();
+      setDbConnected(res.isConnected);
+      setDbStatusMessage(res.message);
+    } catch {
+      setDbConnected(false);
+      setDbStatusMessage('وضع التخزين المؤقت المحلي (تلقائي)');
+    } finally {
+      setIsCheckingDb(false);
+    }
+  };
+
+  useEffect(() => {
+    checkDb();
+  }, []);
 
   const totalAlertCount = residencyAlertCount + upcomingCheques.length;
 
@@ -83,6 +107,24 @@ export function AppHeader({
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">
                   د.ك KWD
                 </span>
+
+                {/* Database Connectivity Status Indicator */}
+                <button
+                  type="button"
+                  onClick={checkDb}
+                  disabled={isCheckingDb}
+                  className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                    dbConnected 
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30' 
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                  }`}
+                  title={`${dbStatusMessage} (انقر لإعادة فحص الاتصال بـ MySQL)`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${dbConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <Database className="w-3 h-3" />
+                  <span>{isCheckingDb ? 'فحص...' : dbConnected ? 'MySQL متصل' : 'تخزين محلي'}</span>
+                  {isCheckingDb && <RefreshCw className="w-2.5 h-2.5 animate-spin" />}
+                </button>
               </div>
               <span className="text-[11px] text-slate-400">
                 {getTabLabel(activeTab)}

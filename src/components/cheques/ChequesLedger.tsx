@@ -281,7 +281,12 @@ export function ChequesLedger({
                   return (
                     <tr key={c.id} className="hover:bg-slate-50 transition">
                       <td className="p-3 font-mono font-black text-slate-900 bg-slate-50/40">
-                        #{c.chequeNumberStr}
+                        <div>#{c.chequeNumberStr}</div>
+                        {(c.chequeWidthCm || c.templateName) && (
+                          <div className="text-[9px] font-sans font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded inline-block mt-0.5 whitespace-nowrap">
+                            {c.chequeWidthCm && c.chequeHeightCm ? `${c.chequeWidthCm}×${c.chequeHeightCm} سم` : c.templateName}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 font-bold text-slate-900 max-w-[200px]">
                         <div>{c.beneficiaryName}</div>

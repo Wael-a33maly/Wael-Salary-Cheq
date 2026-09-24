@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, 
   Receipt, 
@@ -8,7 +8,10 @@ import {
   Sliders, 
   Landmark, 
   Plus,
-  BookOpen
+  BookOpen,
+  Database,
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   BankAccount, 
@@ -24,6 +27,7 @@ import {
   INITIAL_ISSUED_CHEQUES, 
   DEFAULT_PRINT_SETTINGS 
 } from '../../mockCheques';
+import { dbService } from '../../services/apiService';
 import { ChequesDashboard } from './ChequesDashboard';
 import { IssueChequeForm } from './IssueChequeForm';
 import { ChequesLedger } from './ChequesLedger';
@@ -38,28 +42,64 @@ interface ChequePrintingModuleProps {
   initialSubTab?: string;
   initialChequeIdToPrint?: string;
   activeSubTab?: string;
-  onSubTabChange?: (tab: string) => void;
+  onSubTabChange?: (subTab: string) => void;
   companyName?: string;
 }
 
-export function ChequePrintingModule({ 
-  initialSubTab = 'dashboard', 
+export function ChequePrintingModule({
+  initialSubTab = 'dashboard',
   initialChequeIdToPrint,
   activeSubTab,
   onSubTabChange,
   companyName,
 }: ChequePrintingModuleProps) {
-  // Master State
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(INITIAL_BANK_ACCOUNTS);
-  const [chequeBooks, setChequeBooks] = useState<ChequeBook[]>(INITIAL_CHEQUE_BOOKS);
-  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>(INITIAL_BENEFICIARIES);
-  const [issuedCheques, setIssuedCheques] = useState<IssuedCheque[]>(INITIAL_ISSUED_CHEQUES);
+  // State for database connection and live sync status
+  const [dbConnected, setDbConnected] = useState<boolean>(false);
+  const [dbSyncMessage, setDbSyncMessage] = useState<string>('جاري فحص الاتصال بقاعدة البيانات...');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Master State with LocalStorage persistence and Database sync
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem('app_bank_accounts');
+      return saved ? JSON.parse(saved) : INITIAL_BANK_ACCOUNTS;
+    } catch {
+      return INITIAL_BANK_ACCOUNTS;
+    }
+  });
+
+  const [chequeBooks, setChequeBooks] = useState<ChequeBook[]>(() => {
+    try {
+      const saved = localStorage.getItem('app_cheque_books');
+      return saved ? JSON.parse(saved) : INITIAL_CHEQUE_BOOKS;
+    } catch {
+      return INITIAL_CHEQUE_BOOKS;
+    }
+  });
+
+  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>(() => {
+    try {
+      const saved = localStorage.getItem('app_beneficiaries');
+      return saved ? JSON.parse(saved) : INITIAL_BENEFICIARIES;
+    } catch {
+      return INITIAL_BENEFICIARIES;
+    }
+  });
+
+  const [issuedCheques, setIssuedCheques] = useState<IssuedCheque[]>(() => {
+    try {
+      const saved = localStorage.getItem('app_issued_cheques');
+      return saved ? JSON.parse(saved) : INITIAL_ISSUED_CHEQUES;
+    } catch {
+      return INITIAL_ISSUED_CHEQUES;
+    }
+  });
+
   const [printSettings, setPrintSettings] = useState<ChequePrintSettings>(() => {
     try {
       const saved = localStorage.getItem('app_cheque_print_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Ensure default is vector_template as requested by user
         if (!parsed.templateMode || parsed.templateMode === 'scanned_image') {
           parsed.templateMode = 'vector_template';
         }
@@ -71,6 +111,79 @@ export function ChequePrintingModule({
     return DEFAULT_PRINT_SETTINGS;
   });
 
+  // مزامنة البيانات تلقائياً مع خادم وقاعدة بيانات MySQL عند فتح الصفحة
+  const syncWithDatabase = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const status = await dbService.checkConnection();
+      setDbConnected(status.isConnected);
+      setDbSyncMessage(status.message);
+
+      if (status.isConnected) {
+        const data = await dbService.fetchBootstrapData();
+        if (data) {
+          if (data.bankAccounts && data.bankAccounts.length > 0) {
+            setBankAccounts(data.bankAccounts);
+          }
+          if (data.chequeBooks && data.chequeBooks.length > 0) {
+            setChequeBooks(data.chequeBooks);
+          }
+          if (data.beneficiaries && data.beneficiaries.length > 0) {
+            setBeneficiaries(data.beneficiaries);
+          }
+          if (data.issuedCheques && data.issuedCheques.length > 0) {
+            setIssuedCheques(data.issuedCheques);
+          }
+          if (data.printSettings) {
+            setPrintSettings(data.printSettings);
+          }
+          setDbSyncMessage('مربوط بقاعدة بيانات MySQL المركزية (مزامنة حية)');
+        }
+      }
+    } catch (err) {
+      console.warn('Sync failed:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncWithDatabase();
+  }, [syncWithDatabase]);
+
+  // تحديث التخزين المحلي كطبقة احتياطية سريعة
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_bank_accounts', JSON.stringify(bankAccounts));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [bankAccounts]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_cheque_books', JSON.stringify(chequeBooks));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [chequeBooks]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_beneficiaries', JSON.stringify(beneficiaries));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [beneficiaries]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_issued_cheques', JSON.stringify(issuedCheques));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [issuedCheques]);
+
   const handleUpdatePrintSettings = (newSettings: ChequePrintSettings) => {
     setPrintSettings(newSettings);
     try {
@@ -78,6 +191,8 @@ export function ChequePrintingModule({
     } catch (e) {
       console.error(e);
     }
+    // حفظ في MySQL إذا كان متصلاً
+    dbService.savePrintSettingsToDb(newSettings);
   };
 
   // Navigation State
@@ -104,7 +219,7 @@ export function ChequePrintingModule({
   // Receipt & Envelope modal state
   const [receiptEnvelopeCheque, setReceiptEnvelopeCheque] = useState<IssuedCheque | null>(null);
 
-  // Handlers for data updates
+  // Handlers for data updates with real MySQL persistence
   const handleSaveCheque = (newCheque: IssuedCheque) => {
     setIssuedCheques((prev) => [newCheque, ...prev]);
 
@@ -116,6 +231,9 @@ export function ChequePrintingModule({
           : bk
       )
     );
+
+    // حفظ في MySQL قاعدة البيانات
+    dbService.saveChequeToDb(newCheque);
   };
 
   const handleSaveAndPrint = (newCheque: IssuedCheque) => {
@@ -142,6 +260,9 @@ export function ChequePrintingModule({
         return c;
       })
     );
+
+    // تحديث في قاعدة بيانات MySQL
+    dbService.updateChequeStatusInDb(chequeId, newStatus, todayStr, notes);
   };
 
   // Add Beneficiary
@@ -160,15 +281,21 @@ export function ChequePrintingModule({
       status: ben.status || 'active',
       createdAt: new Date().toISOString().split('T')[0],
     };
-    setBeneficiaries((prev) => [...prev, newBen]);
+    const updatedList = [...beneficiaries, newBen];
+    setBeneficiaries(updatedList);
+    dbService.saveBeneficiariesToDb(updatedList);
   };
 
   const handleUpdateBeneficiary = (updated: Beneficiary) => {
-    setBeneficiaries((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    const updatedList = beneficiaries.map((b) => (b.id === updated.id ? updated : b));
+    setBeneficiaries(updatedList);
+    dbService.saveBeneficiariesToDb(updatedList);
   };
 
   const handleDeleteBeneficiary = (id: string) => {
-    setBeneficiaries((prev) => prev.filter((b) => b.id !== id));
+    const updatedList = beneficiaries.filter((b) => b.id !== id);
+    setBeneficiaries(updatedList);
+    dbService.saveBeneficiariesToDb(updatedList);
   };
 
   // Add Bank Account
@@ -177,11 +304,15 @@ export function ChequePrintingModule({
       ...acc,
       id: `acc-${Date.now()}`,
     };
-    setBankAccounts((prev) => [...prev, newAcc]);
+    const updatedList = [...bankAccounts, newAcc];
+    setBankAccounts(updatedList);
+    dbService.saveBankAccountsToDb(updatedList);
   };
 
   const handleUpdateAccount = (updated: BankAccount) => {
-    setBankAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+    const updatedList = bankAccounts.map((a) => (a.id === updated.id ? updated : a));
+    setBankAccounts(updatedList);
+    dbService.saveBankAccountsToDb(updatedList);
   };
 
   // Add Cheque Book
@@ -190,11 +321,15 @@ export function ChequePrintingModule({
       ...book,
       id: `bk-${Date.now()}`,
     };
-    setChequeBooks((prev) => [...prev, newBk]);
+    const updatedList = [...chequeBooks, newBk];
+    setChequeBooks(updatedList);
+    dbService.saveChequeBooksToDb(updatedList);
   };
 
   const handleUpdateChequeBook = (updated: ChequeBook) => {
-    setChequeBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    const updatedList = chequeBooks.map((b) => (b.id === updated.id ? updated : b));
+    setChequeBooks(updatedList);
+    dbService.saveChequeBooksToDb(updatedList);
   };
 
   // Quick navigation helpers
@@ -232,54 +367,73 @@ export function ChequePrintingModule({
   return (
     <div className="space-y-6">
       
-      {/* Top Main Header for Cheque Printing */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 print:hidden">
-        
-        {/* Module Title & Active Sub-Tab Indicator */}
+      {/* Top Main Header for Cheque Printing with Live Database Status */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-600 flex items-center justify-center text-white shadow-md">
-            <Landmark className="w-5 h-5" />
+          <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-md shadow-amber-600/20">
+            <Landmark className="w-6 h-6" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-base font-black text-slate-900">
-                منظومة طباعة الشيكات البنكية وإدارة الدفاتر
-              </h1>
-              <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-300">
-                البنك التجاري CBK
+              <h2 className="text-lg font-black text-slate-900">منظومة طباعة الشيكات المصرفية وإدارة الدفاتر</h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                البنك التجاري الكويتي (CBK)
               </span>
-              <span className="text-slate-300">|</span>
-              {(() => {
-                const activeInfo = subTabs.find((t) => t.id === currentSubTab);
-                const ActiveIcon = activeInfo?.icon || LayoutDashboard;
-                return (
-                  <span className="font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200/80 flex items-center gap-1 text-xs">
-                    <ActiveIcon className="w-3.5 h-3.5 text-amber-600" />
-                    {activeInfo?.label || 'لوحة التحكم والداشبورد'}
-                  </span>
-                );
-              })()}
             </div>
-            <p className="text-[11px] text-slate-500">
-              دعم متعدد الحسابات البنكية، تتبع تسلسل الدفاتر، التفقيط التلقائي، والطباعة الدقيقة
-            </p>
+            <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+              <Database className={`w-3.5 h-3.5 ${dbConnected ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span className={`font-semibold ${dbConnected ? 'text-emerald-700' : 'text-slate-600'}`}>
+                {dbSyncMessage}
+              </span>
+              <button 
+                onClick={syncWithDatabase}
+                disabled={isSyncing}
+                title="تحديث البيانات من قاعدة بيانات MySQL"
+                className="hover:text-blue-600 p-0.5"
+              >
+                <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-amber-600' : ''}`} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Quick action button */}
-        {currentSubTab !== 'issue' && (
-          <button
-            type="button"
-            onClick={() => {
-              setPrefillBeneficiaryForIssue('');
-              setCurrentSubTab('issue');
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs shadow-md transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تحرير شيك جديد</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Quick Issue Button */}
+          {currentSubTab !== 'issue' && (
+            <button
+              onClick={() => {
+                setPrefillBeneficiaryForIssue('');
+                setCurrentSubTab('issue');
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs shadow-md transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>تحرير شيك جديد</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Sub Tabs Navigation Bar */}
+      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap gap-1.5 print:hidden">
+        {subTabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = currentSubTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setCurrentSubTab(tab.id)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+                isActive
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Render Active View */}
@@ -375,6 +529,7 @@ export function ChequePrintingModule({
         <ChequeCalibrationTab
           printSettings={printSettings}
           onUpdatePrintSettings={handleUpdatePrintSettings}
+          bankAccounts={bankAccounts}
         />
       )}
 

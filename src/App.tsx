@@ -14,6 +14,7 @@ import { LoginView } from './components/LoginView';
 import { ChequePrintingModule } from './components/cheques/ChequePrintingModule';
 import { INITIAL_ISSUED_CHEQUES, INITIAL_BANK_ACCOUNTS } from './mockCheques';
 import { BankReconciliationView } from './components/reconciliation/BankReconciliationView';
+import { dbService } from './services/apiService';
 import { 
   INITIAL_SETTINGS, 
   INITIAL_BRANCHES, 
@@ -121,6 +122,55 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('payroll_saved_months', JSON.stringify(savedPayrolls));
   }, [savedPayrolls]);
+
+  // استرجاع البيانات الأولية من MySQL تلقائياً عند تشغيل النظام على الدومين
+  useEffect(() => {
+    dbService.fetchBootstrapData().then((data) => {
+      if (!data) return;
+      if (data.companySettings && data.companySettings.company_name) {
+        setSettings((prev) => ({
+          ...prev,
+          companyName: data.companySettings.company_name || prev.companyName,
+          overtimeRate: parseFloat(data.companySettings.overtime_multiplier) || prev.overtimeRate,
+          residenceAlertDays: parseInt(data.companySettings.residency_alert_days, 10) || prev.residenceAlertDays,
+          roundingStep: parseFloat(data.companySettings.rounding_step) || prev.roundingStep,
+        }));
+      }
+      if (data.branches && data.branches.length > 0) {
+        setBranches(data.branches.map((b: any) => ({
+          id: parseInt(b.id, 10),
+          name: b.name,
+          code: b.code,
+          status: b.status === 'inactive' ? 'inactive' : 'active',
+          notes: b.notes || '',
+        })));
+      }
+      if (data.departments && data.departments.length > 0) {
+        setDepartments(data.departments.map((d: any) => ({
+          id: parseInt(d.id, 10),
+          branchId: parseInt(d.branch_id, 10),
+          name: d.name,
+          status: d.status === 'inactive' ? 'inactive' : 'active',
+        })));
+      }
+      if (data.employees && data.employees.length > 0) {
+        setEmployees(data.employees.map((e: any) => ({
+          id: parseInt(e.id, 10),
+          civilId: e.civil_id,
+          fullName: e.name || e.full_name || '',
+          branchId: parseInt(e.branch_id, 10),
+          departmentId: parseInt(e.department_id, 10),
+          basicSalary: parseFloat(e.basic_salary) || 0,
+          dailyHours: parseInt(e.daily_work_hours, 10) || 8,
+          bankName: e.bank_name || '',
+          iban: e.iban || '',
+          bankTransferAmount: parseFloat(e.bank_transfer_amount) || 0,
+          residenceExpiryDate: e.residence_expiry_date || '',
+          status: e.status === 'inactive' || e.status === 'suspended' || e.status === 'resigned' ? 'inactive' : 'active',
+        })));
+      }
+    }).catch((err) => console.warn('App bootstrap from MySQL error:', err));
+  }, []);
 
   // Log Audit Action helper
   const addAuditLog = (action: string, tableName: string, details: string) => {
