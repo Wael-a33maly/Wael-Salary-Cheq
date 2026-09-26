@@ -7,11 +7,16 @@ import {
   Printer,
   FileText,
   Landmark,
-  Calendar,
   ArrowUpRight,
   LayoutDashboard,
   Database,
-  RefreshCw
+  RefreshCw,
+  Users,
+  Building2,
+  Settings,
+  FileSpreadsheet,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 import { IssuedCheque } from '../types';
 import { dbService } from '../services/apiService';
@@ -67,18 +72,474 @@ export function AppHeader({
 
   const totalAlertCount = residencyAlertCount + upcomingCheques.length;
 
-  const getTabLabel = (tab: string) => {
+  const getTabInfo = (tab: string) => {
     switch (tab) {
-      case 'dashboard': return 'لوحة التحكم المالية';
-      case 'payroll': return 'مسير الرواتب الشهري';
-      case 'receipts': return 'طباعة الإيصالات والأظرف';
-      case 'cheques': return 'طباعة الشيكات البنكية (CBK)';
-      case 'employees': return 'سجل الموظفين';
-      case 'branches': return 'الفروع والأقسام';
-      case 'reports': return 'مركز التقارير والتدقيق';
-      case 'users': return 'إدارة المستخدمين';
-      case 'settings': return 'الإعدادات والشركة';
-      default: return 'نظام إدارة الرواتب';
+      case 'dashboard': 
+        return { 
+          title: 'لوحة التحكم المالية', 
+          subtitle: 'مؤشرات السيولة وحركات الشيكات والرواتب', 
+          badge: 'نظرة شاملة',
+          badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+        };
+      case 'payroll': 
+        return { 
+          title: 'مسير الرواتب الشهري', 
+          subtitle: 'احتساب الأجور والبدلات والاستقطاعات بدقة الفلس (0.001 د.ك)', 
+          badge: 'دقة 0.001 د.ك',
+          badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+        };
+      case 'receipts': 
+        return { 
+          title: 'طباعة الإيصالات والأظرف', 
+          subtitle: 'سندات الصرف الرسمية وأظرف الرواتب الورقية', 
+          badge: 'طباعة معتمدة',
+          badgeClass: 'bg-teal-500/20 text-teal-300 border-teal-500/30'
+        };
+      case 'cheques': 
+        return { 
+          title: 'منظومة الشيكات المصرفية (CBK)', 
+          subtitle: 'إصدار الشيكات المعتمدة ومتابعة تواريخ الاستحقاق', 
+          badge: 'شيكات رسمية',
+          badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+        };
+      case 'employees': 
+        return { 
+          title: 'سجل وملفات الموظفين', 
+          subtitle: 'بيانات العاملين، الحسابات البنكية، وتواريخ الإقامات', 
+          badge: 'ملفات نشطة',
+          badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+        };
+      case 'branches': 
+        return { 
+          title: 'الفروع والأقسام التنظيمية', 
+          subtitle: 'الهيكل الإداري ومراكز التكلفة للفروع الأربعة', 
+          badge: 'هيكل منظم',
+          badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+        };
+      case 'reconciliation': 
+        return { 
+          title: 'المطابقة والتسوية البنكية', 
+          subtitle: 'مطابقة كشوف الحساب المصرفية واستخراج الفروقات آلياً', 
+          badge: 'تسوية ذكية',
+          badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+        };
+      case 'reports': 
+        return { 
+          title: 'مركز التقارير والتدقيق', 
+          subtitle: 'التقارير المالية المجمعة، كشوف البنوك، والإقامات', 
+          badge: 'تقارير مالية',
+          badgeClass: 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+        };
+      case 'users': 
+        return { 
+          title: 'إدارة المستخدمين والصلاحيات', 
+          subtitle: 'حسابات المشرفين والمحاسبين وصلاحيات الوصول', 
+          badge: 'أمان النظام',
+          badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+        };
+      case 'settings': 
+        return { 
+          title: 'الإعدادات والنسخ الاحتياطي', 
+          subtitle: 'جدولة النسخ التلقائي، مسار صور الشيكات، وتصفير البيانات', 
+          badge: 'إدارة المنظومة',
+          badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+        };
+      default: 
+        return { 
+          title: 'نظام إدارة الرواتب', 
+          subtitle: 'المنظومة المالية والإدارية', 
+          badge: 'A33maly',
+          badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+        };
+    }
+  };
+
+  const currentTabInfo = getTabInfo(activeTab);
+
+  // Render contextual action buttons tailored specifically to the active tab
+  const renderContextualActions = () => {
+    switch (activeTab) {
+      case 'payroll':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab('receipts')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="طباعة إيصالات الصرف والأظرف الورقية"
+            >
+              <Printer className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">طباعة الإيصالات</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectReportId?.(1);
+                setActiveTab('reports');
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="التقرير المالي المجمع"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">تقرير الرواتب</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+              title="الرجوع للوحة التحكم الرئيسية"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'cheques':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => onNavigateToCheques?.('ledger')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+              title="كشف حركة الشيكات المسجلة"
+            >
+              <Landmark className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">سجل الشيكات</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigateToCheques?.('print')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="إصدار وطباعة شيك جديد"
+            >
+              <Calculator className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">إصدار شيك</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('reconciliation')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="مطابقة كشف الحساب البنكي"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-teal-400" />
+              <span className="hidden md:inline">المطابقة البنكية</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'receipts':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab('payroll')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-blue-600/30 text-blue-300 border-blue-500 hover:bg-blue-600/40"
+              title="العودة لمسير الرواتب"
+            >
+              <Calculator className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">مسير الرواتب</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('cheques');
+                onNavigateToCheques?.('dashboard');
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+            >
+              <Landmark className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline">الشيكات المصرفية</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'employees':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab('payroll')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="احتساب مسير الرواتب"
+            >
+              <Calculator className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">مسير الرواتب</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('branches')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="الفروع والأقسام"
+            >
+              <Building2 className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden md:inline">الفروع والأقسام</span>
+            </button>
+
+            {residencyAlertCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectReportId?.(6);
+                  setActiveTab('reports');
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition border bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30"
+                title="تنبيهات الإقامات المنتهية"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">{residencyAlertCount} إقامات منتهية</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'branches':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab('employees')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="سجل الموظفين"
+            >
+              <Users className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">سجل الموظفين</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('payroll')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+            >
+              <Calculator className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">مسير الرواتب</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'reconciliation':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('cheques');
+                onNavigateToCheques?.('dashboard');
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="منظومة الشيكات المصرفية"
+            >
+              <Landmark className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">الشيكات المصرفية</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectReportId?.(3);
+                setActiveTab('reports');
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="كشف التحويلات البنكية"
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">كشف البنوك</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'reports':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => onSelectReportId?.(1)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="التقرير المالي المجمع"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">التقرير المجمع</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectReportId?.(3)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="كشف التحويلات البنكية"
+            >
+              <Landmark className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">كشف البنوك</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'settings':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab('payroll')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="مسير الرواتب"
+            >
+              <Calculator className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">مسير الرواتب</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('cheques');
+                onNavigateToCheques?.('dashboard');
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+            >
+              <Landmark className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">الشيكات المصرفية</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      case 'users':
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab('settings')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="الإعدادات وقاعدة البيانات"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">الإعدادات</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-300" />
+              <span className="hidden sm:inline">لوحة التحكم</span>
+            </button>
+          </>
+        );
+
+      default: // dashboard
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab('payroll')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="مسير الرواتب الشهري"
+            >
+              <Calculator className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">مسير الرواتب</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('cheques');
+                onNavigateToCheques?.('dashboard');
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="طباعة وإدارة الشيكات المصرفية (CBK)"
+            >
+              <Landmark className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">الشيكات المصرفية</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('receipts')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="طباعة الإيصالات والأظرف"
+            >
+              <Printer className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">الإيصالات والأظرف</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('reconciliation')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
+              title="مطابقة كشف الحساب البنكي"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-teal-400" />
+              <span className="hidden lg:inline">مطابقة البنك</span>
+            </button>
+          </>
+        );
     }
   };
 
@@ -87,7 +548,7 @@ export function AppHeader({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5">
         <div className="flex items-center justify-between gap-3">
           
-          {/* Right: Sidebar Toggle & Company Title */}
+          {/* Right: Sidebar Toggle, Company Title & Adaptive Tab Info */}
           <div className="flex items-center gap-3">
             {onToggleSidebar && (
               <button
@@ -100,7 +561,7 @@ export function AppHeader({
             )}
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
                   {companyName}
                 </h1>
@@ -108,12 +569,17 @@ export function AppHeader({
                   د.ك KWD
                 </span>
 
+                {/* Adaptive Tab Badge */}
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border hidden sm:inline-block ${currentTabInfo.badgeClass}`}>
+                  {currentTabInfo.badge}
+                </span>
+
                 {/* Database Connectivity Status Indicator */}
                 <button
                   type="button"
                   onClick={checkDb}
                   disabled={isCheckingDb}
-                  className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                  className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
                     dbConnected 
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30' 
                       : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
@@ -126,81 +592,25 @@ export function AppHeader({
                   {isCheckingDb && <RefreshCw className="w-2.5 h-2.5 animate-spin" />}
                 </button>
               </div>
-              <span className="text-[11px] text-slate-400">
-                {getTabLabel(activeTab)}
-              </span>
+
+              {/* Contextual Subtitle that adapts per Tab */}
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs font-black text-slate-200">
+                  {currentTabInfo.title}
+                </span>
+                <span className="text-slate-600 text-xs hidden sm:inline">•</span>
+                <span className="text-[11px] text-slate-400 hidden sm:inline truncate max-w-[280px] lg:max-w-none">
+                  {currentTabInfo.subtitle}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Left: Quick Actions & Notifications */}
+          {/* Left: Context-Adaptive Actions & Notifications */}
           <div className="flex items-center gap-2">
             
-            {/* Quick action: لوحة التحكم (إذا كان خارج الداشبورد) */}
-            {activeTab !== 'dashboard' && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('dashboard')}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition border border-slate-700"
-                title="الرجوع للوحة التحكم الرئيسية"
-              >
-                <LayoutDashboard className="w-3.5 h-3.5 text-blue-400" />
-                <span className="hidden md:inline">لوحة التحكم</span>
-              </button>
-            )}
-
-            {/* Quick action: مسير الرواتب (مخفي تماماً عند فتح تبويب الشيكات بناءً على طلب المستخدم) */}
-            {activeTab !== 'cheques' && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('payroll')}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
-                  activeTab === 'payroll'
-                    ? 'bg-blue-600/30 text-blue-300 border-blue-500'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
-                }`}
-                title="مسير الرواتب"
-              >
-                <Calculator className="w-3.5 h-3.5 text-blue-400" />
-                <span className="hidden sm:inline">مسير الرواتب</span>
-              </button>
-            )}
-
-            {/* Quick action: الشيكات المصرفية (ظاهر في لوحة التحكم وباقي التبويبات) */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('cheques');
-                if (onNavigateToCheques) {
-                  onNavigateToCheques('dashboard');
-                }
-              }}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
-                activeTab === 'cheques'
-                  ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-xs'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
-              }`}
-              title="طباعة وإدارة الشيكات المصرفية (CBK)"
-            >
-              <Landmark className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">الشيكات المصرفية</span>
-            </button>
-
-            {/* Quick action: طباعة الإيصالات والأظرف */}
-            {activeTab !== 'cheques' && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('receipts')}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
-                  activeTab === 'receipts'
-                    ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
-                }`}
-                title="طباعة إيصالات الصرف والأظرف"
-              >
-                <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">الإيصالات والأظرف</span>
-              </button>
-            )}
+            {/* Dynamic Actions for Active Tab */}
+            {renderContextualActions()}
 
             {/* Unified Alerts Bell: Residency + Upcoming Cheques */}
             <div className="relative">
@@ -385,6 +795,19 @@ export function AppHeader({
                 </div>
               )}
             </div>
+
+            {/* User Profile / Logout Button */}
+            {currentUser && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 bg-slate-800 hover:bg-red-900/40 text-slate-300 hover:text-red-300 rounded-lg text-xs font-bold border border-slate-700 transition"
+                title={`تسجيل الخروج (${currentUser.fullName})`}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden xl:inline">{currentUser.username}</span>
+              </button>
+            )}
 
           </div>
 

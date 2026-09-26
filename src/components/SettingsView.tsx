@@ -101,13 +101,18 @@ export function SettingsView({
   const [restoreConfirmInput, setRestoreConfirmInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Data Reset States
+  // Data Reset States (التنفيذ التلقائي على خادم MySQL والتخزين المحلي بدون تدخل المستخدم)
   const [selectedResetItems, setSelectedResetItems] = useState<string[]>([]);
-  const [wipeRemoteDb, setWipeRemoteDb] = useState<boolean>(true);
+  const wipeRemoteDb = true; // يتم التنفيذ على السيرفر والمحلي تلقائياً بدون تدخل المستخدم
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [confirmInputText, setConfirmInputText] = useState<string>('');
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+
+  // Full Clean Factory Reset States (بدء استخدام جديد كلياً بدون الاحتفاظ بأي شيء)
+  const [showFullResetModal, setShowFullResetModal] = useState<boolean>(false);
+  const [fullResetConfirmInput, setFullResetConfirmInput] = useState<string>('');
+  const [isFullResetting, setIsFullResetting] = useState<boolean>(false);
 
   // Load backups list on mount
   useEffect(() => {
@@ -555,6 +560,28 @@ export function SettingsView({
       alert(`حدث خطأ أثناء إعادة التعيين: ${err?.message || err}`);
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const handleExecuteFullReset = async () => {
+    if (!onResetData) return;
+    setIsFullResetting(true);
+    try {
+      // تنفيذ تصفير شامل لكافة البيانات بدون الاحتفاظ بأي صور أو قوالب أو سجلات
+      const result = await onResetData(['all'], true, false);
+      setShowFullResetModal(false);
+      setFullResetConfirmInput('');
+      setSelectedResetItems([]);
+      setResetSuccessMessage(
+        result && typeof result === 'object' && 'message' in result && result.message
+          ? result.message
+          : 'تم تصفير النظام بالكامل بنجاح على السيرفر والمحلي! التطبيق الآن نظيف وجاهز للتشغيل والرفع على السيرفر ببيانات جديدة كلياً.'
+      );
+      setTimeout(() => setResetSuccessMessage(null), 7000);
+    } catch (err: any) {
+      alert(`حدث خطأ أثناء التصفير الشامل: ${err?.message || err}`);
+    } finally {
+      setIsFullResetting(false);
     }
   };
 
@@ -1376,7 +1403,54 @@ export function SettingsView({
             </div>
           )}
 
-          {/* Cheque Images Protection Banner in Reset */}
+          {/* COMPLETE FULL FACTORY RESET CARD (إعادة التعيين الشامل لبدء تشغيل نظيف كلياً) */}
+          <div className="p-5 bg-gradient-to-r from-red-50 via-rose-50 to-red-50 border-2 border-red-300 rounded-2xl space-y-3 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-black text-sm text-red-950">
+                      إعادة التعيين الكامل والشامل (بدء تشغيل جديد كلياً للإنتاج بدون أي بيانات سابقة)
+                    </h4>
+                    <span className="bg-red-200 text-red-900 font-bold text-[10px] px-2 py-0.5 rounded-full border border-red-300">
+                      تصفير مصنع كامل
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-red-800 mt-1 leading-relaxed">
+                    حذف وتصفير كافة البيانات، مسيرات الرواتب، سجلات الموظفين، الفروع، دفاتر وشيكات الصرف، الحسابات المصرفية، قوالب وصور الشيكات المرفوعة، وسجل التدقيق بالكامل بدون الاحتفاظ بأي شيء؛ لتشغيل التطبيق نظيفاً ببيانات جديدة كلياً تمهيداً للرفع على السيرفر.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFullResetConfirmInput('');
+                  setShowFullResetModal(true);
+                }}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md transition shrink-0 whitespace-nowrap"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>إعادة التعيين الكامل (تصفير شامل)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Automatic Server & Local Execution Guarantee Banner */}
+          <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-blue-950 font-bold">
+              <Database className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>يتم تنفيذ التصفير وإعادة التعيين تلقائياً على كل من خادم MySQL في الاستضافة والتخزين المحلي بالتزامن وبدون تدخل من المستخدم</span>
+            </div>
+            <span className="text-[11px] bg-blue-100 text-blue-800 font-bold px-2.5 py-0.5 rounded-full border border-blue-200 shrink-0 self-start sm:self-auto">
+              تصفير تلقائي على السيرفر والمحلي ✓
+            </span>
+          </div>
+
+          {/* Cheque Images Protection Banner in Selective Reset */}
           <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 text-xs">
             <label className="flex items-center gap-2.5 cursor-pointer font-bold text-emerald-950 select-none">
               <input
@@ -1391,30 +1465,11 @@ export function SettingsView({
               />
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>حماية صور وقوالب الشيكات في المسار المخصص ({backupConfig.chequeImagesCustomPath || 'uploads/cheques'}) عند التصفير</span>
+                <span>حماية صور وقوالب الشيكات في المسار المخصص ({backupConfig.chequeImagesCustomPath || 'uploads/cheques'}) عند التصفير الاختياري أدناه</span>
               </div>
             </label>
             <span className="text-[11px] text-emerald-700 hidden sm:inline font-bold">
-              (مفعلة — تحمي الشيكات الممسوحة ضوئياً من المسح)
-            </span>
-          </div>
-
-          {/* Remote MySQL Database Sync Option */}
-          <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-xs">
-            <label className="flex items-center gap-2.5 cursor-pointer font-bold text-amber-950 select-none">
-              <input
-                type="checkbox"
-                checked={wipeRemoteDb}
-                onChange={(e) => setWipeRemoteDb(e.target.checked)}
-                className="w-4 h-4 text-red-600 rounded border-amber-300 focus:ring-red-500"
-              />
-              <div className="flex items-center gap-1.5">
-                <Database className="w-4 h-4 text-amber-700" />
-                <span>تنفيذ الحذف والتصفير أيضاً في قاعدة بيانات MySQL على الاستضافة (Hostinger) بالتوازي</span>
-              </div>
-            </label>
-            <span className="text-[11px] text-amber-700 hidden sm:inline">
-              (ينفذ مسح الجداول المحددة بالسيرفر تلقائياً)
+              (مفعلة — تحمي الشيكات الممسوحة ضوئياً من المسح في التصفير الاختياري)
             </span>
           </div>
 
@@ -1727,6 +1782,110 @@ export function SettingsView({
                   <>
                     <Trash2 className="w-4 h-4" />
                     <span>تأكيد الحذف النهائي</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* COMPLETE FULL FACTORY RESET MODAL (تصفير شامل للإنتاج)   */}
+      {/* ========================================================= */}
+      {showFullResetModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border-2 border-red-600 animate-in fade-in zoom-in-95">
+            
+            {/* Modal Header */}
+            <div className="bg-red-600 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <ShieldAlert className="w-5 h-5 text-amber-300" />
+                <h3 className="font-black text-sm">تأكيد أمني مشدد: إعادة التعيين الكامل والشامل</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFullResetModal(false)}
+                className="text-white/80 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 text-xs">
+              
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-900 space-y-1.5">
+                <div className="font-black text-xs flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>تنبيه نهائي لا يمكن التراجع عنه:</span>
+                </div>
+                <p className="text-[11px] text-red-800 leading-relaxed">
+                  أنت على وشك تنفيذ <strong>تصفير مصنع كامل وشامل</strong> للنظام على السيرفر (MySQL) ومحلياً؛ سيتم حذف جميع مسيرات الرواتب، سجلات الموظفين، الفروع والأقسام، دفاتر وشيكات الصرف، الحسابات المصرفية، قوالب وصور الشيكات، وجلسات التسوية وسجل التدقيق بالكامل بدون استثناء أو احتفاظ بأي شيء، لتهيئة التطبيق للبدء من جديد.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-slate-700">
+                <div className="font-bold text-slate-900 mb-1">ما سيتم حذفه وتصفيره بالكامل:</div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <span className="flex items-center gap-1 text-red-700">✕ كافة مسيرات وقسائم الرواتب</span>
+                  <span className="flex items-center gap-1 text-red-700">✕ كافة ملفات الموظفين والآيبان</span>
+                  <span className="flex items-center gap-1 text-red-700">✕ الفروع والأقسام الأربعة</span>
+                  <span className="flex items-center gap-1 text-red-700">✕ سجل الشيكات الصادرة ودفاترها</span>
+                  <span className="flex items-center gap-1 text-red-700">✕ الحسابات وصور وقوالب الشيكات</span>
+                  <span className="flex items-center gap-1 text-red-700">✕ جلسات التسوية وسجل التدقيق</span>
+                </div>
+              </div>
+
+              {/* Confirmation Input Word */}
+              <div className="space-y-1.5 pt-1">
+                <label className="block text-slate-700 font-bold text-[11px]">
+                  لتأكيد التصفير الشامل والبدء كنسخة جديدة كلياً، اكتب عبارة <strong className="text-red-600 font-mono">تصفير شامل</strong> في الحقل أدناه:
+                </label>
+                <input
+                  type="text"
+                  value={fullResetConfirmInput}
+                  onChange={(e) => setFullResetConfirmInput(e.target.value)}
+                  placeholder="اكتب (تصفير شامل) هنا..."
+                  className="w-full p-2.5 border-2 border-red-300 rounded-xl text-center font-bold text-xs bg-red-50/30 focus:border-red-500 focus:outline-none"
+                  autoFocus
+                />
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowFullResetModal(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-300 transition"
+              >
+                إلغاء الأمر
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  isFullResetting || 
+                  (fullResetConfirmInput.trim() !== 'تصفير شامل' && 
+                   fullResetConfirmInput.trim() !== 'تصفير' && 
+                   fullResetConfirmInput.trim().toLowerCase() !== 'reset' &&
+                   fullResetConfirmInput.trim().toLowerCase() !== 'delete all')
+                }
+                onClick={handleExecuteFullReset}
+                className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isFullResetting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>جاري التصفير الشامل على السيرفر ومحلياً...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>تأكيد التصفير والبدء من الصفر</span>
                   </>
                 )}
               </button>
