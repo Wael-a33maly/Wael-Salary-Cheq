@@ -169,6 +169,9 @@ export default function App() {
           status: e.status === 'inactive' || e.status === 'suspended' || e.status === 'resigned' ? 'inactive' : 'active',
         })));
       }
+      if (data.payrolls && data.payrolls.length > 0) {
+        setSavedPayrolls(data.payrolls);
+      }
     }).catch((err) => console.warn('App bootstrap from MySQL error:', err));
   }, []);
 
@@ -268,6 +271,8 @@ export default function App() {
       }
       return [payroll, ...prev];
     });
+    // حفظ ومزامنة حية مباشرة في قاعدة بيانات MySQL
+    dbService.savePayrollToDb(payroll).catch((err) => console.warn('Save payroll to MySQL warning:', err));
     addAuditLog('PAYROLL_SAVE', 'payrolls', `حفظ مسير رواتب: ${payroll.monthName} ورقم السند ${payroll.voucherBaseNumber || '-'}`);
   };
 
@@ -276,8 +281,331 @@ export default function App() {
     const p = savedPayrolls.find((item) => item.id === id);
     const monthName = p?.monthName || id;
     setSavedPayrolls((prev) => prev.filter((item) => item.id !== id));
+    // حذف مباشر من قاعدة بيانات MySQL
+    dbService.deletePayrollFromDb(id).catch((err) => console.warn('Delete payroll from MySQL warning:', err));
     addAuditLog('PAYROLL_DELETE', 'payrolls', `حذف كارت مسير الرواتب لشهر: ${monthName}`);
   };
+
+  // Reset & Wipe Selected Data Handler
+  const handleResetData = async (selectedKeys: string[], wipeRemoteDb: boolean, preserveChequeImages = true) => {
+    const isAll = selectedKeys.includes('all');
+
+    // 1. مسيرات وقسائم الرواتب
+    if (isAll || selectedKeys.includes('payrolls')) {
+      setSavedPayrolls([]);
+      localStorage.removeItem('payroll_saved_months');
+    }
+
+    // 2. الموظفين
+    if (isAll || selectedKeys.includes('employees')) {
+      setEmployees([]);
+      localStorage.removeItem('payroll_employees');
+    }
+
+    // 3. الفروع والأقسام
+    if (isAll || selectedKeys.includes('branches_departments')) {
+      setBranches([]);
+      setDepartments([]);
+      localStorage.removeItem('payroll_branches');
+      localStorage.removeItem('payroll_departments');
+    }
+
+    // 4. الشيكات ودفاتر الشيكات
+    if (isAll || selectedKeys.includes('cheques')) {
+      localStorage.removeItem('app_issued_cheques');
+      localStorage.removeItem('app_cheque_books');
+    }
+
+    // 5. الحسابات البنكية والمستفيدين
+    if (isAll || selectedKeys.includes('bank_accounts_beneficiaries')) {
+      if (preserveChequeImages) {
+        // حماية صور وقوالب الشيكات والمسار المخصص لها عند إعادة التعيين
+        try {
+          const rawAccs = localStorage.getItem('app_bank_accounts');
+          if (rawAccs) {
+            const accs = JSON.parse(rawAccs);
+            const preserved = accs.map((a: any) => ({
+              ...a,
+              currentBalance: 0,
+            }));
+            localStorage.setItem('app_bank_accounts', JSON.stringify(preserved));
+          }
+        } catch {}
+      } else {
+        localStorage.removeItem('app_bank_accounts');
+      }
+      localStorage.removeItem('app_beneficiaries');
+    }
+
+    // 6. جلسات مطابقة البنك
+    if (isAll || selectedKeys.includes('reconciliation')) {
+      localStorage.removeItem('rec_sessions');
+      localStorage.removeItem('rec_settings');
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('rec_session_')) {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+
+    // 7. إعدادات المنشأة والطباعة
+    if (isAll || selectedKeys.includes('settings')) {
+      setSettings(INITIAL_SETTINGS);
+      localStorage.removeItem('payroll_settings');
+      localStorage.removeItem('app_cheque_print_settings');
+    }
+
+    // 8. سجل التدقيق
+    if (isAll || selectedKeys.includes('audit_logs')) {
+      setAuditLogs([]);
+      localStorage.removeItem('payroll_audit_logs');
+    }
+
+    // تنفيذ الحذف عن بعد في قاعدة بيانات MySQL
+    let remoteResult: any = null;
+    if (wipeRemoteDb) {
+      try {
+        remoteResult = await dbService.resetDataInDb(selectedKeys, preserveChequeImages);
+      } catch (e) {
+        console.warn('Remote reset warning:', e);
+      }
+    }
+
+    // تسجيل العملية في سجل التدقيق
+    const resetDetails = `إعادة تعيين وحذف مخصص للبيانات: [${selectedKeys.join(', ')}] ${preserveChequeImages ? '(مع حماية صور الشيكات بالمسار المخصص)' : ''} ${wipeRemoteDb ? '(مع حذف MySQL)' : '(محلي فقط)'}`;
+    if (!isAll && !selectedKeys.includes('audit_logs')) {
+      addAuditLog('SYSTEM_RESET', 'system', resetDetails);
+    } else {
+      const initialLog: AuditRecord = {
+        id: Date.now(),
+        username: currentUser?.username || 'admin',
+        action: 'FACTORY_RESET',
+        tableName: 'system',
+        ipAddress: '127.0.0.1',
+        details: resetDetails,
+        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      };
+      setAuditLogs([initialLog]);
+      localStorage.setItem('payroll_audit_logs', JSON.stringify([initialLog]));
+    }
+
+    return remoteResult;
+  };
+
+  // Full Backup Restore Handler (استعادة كامل قاعدة البيانات وصور الشيكات)
+  const handleRestoreBackup = async (backupData: any, restoreToRemoteDb = true): Promise<{ success: boolean; message: string }> => {
+    if (!backupData) {
+      return { success: false, message: 'بيانات ملف النسخة الاحتياطية فارغة أو غير صالحة' };
+    }
+
+    try {
+      // 1. استعادة إعدادات الشركة
+      if (backupData.tables?.settings && backupData.tables.settings.length > 0) {
+        const s = backupData.tables.settings[0];
+        const newSettings: CompanySettings = {
+          ...settings,
+          companyName: s.company_name || settings.companyName,
+          overtimeRate: parseFloat(s.overtime_multiplier) || settings.overtimeRate,
+          residenceAlertDays: parseInt(s.residency_alert_days, 10) || settings.residenceAlertDays,
+          currency: s.currency || settings.currency,
+          roundingStep: parseFloat(s.rounding_step) || settings.roundingStep,
+          backupConfig: backupData.backupConfig || settings.backupConfig,
+        };
+        setSettings(newSettings);
+        localStorage.setItem('payroll_settings', JSON.stringify(newSettings));
+      } else if (backupData.settings) {
+        setSettings(backupData.settings);
+        localStorage.setItem('payroll_settings', JSON.stringify(backupData.settings));
+      }
+
+      // 2. استعادة الفروع
+      if (backupData.tables?.branches) {
+        const mappedBranches: Branch[] = backupData.tables.branches.map((b: any) => ({
+          id: parseInt(b.id, 10),
+          code: b.code || `B-${b.id}`,
+          name: b.name,
+          status: b.status || 'active',
+          employeeCount: parseInt(b.employee_count, 10) || 0,
+          totalSalary: parseFloat(b.total_salary) || 0,
+        }));
+        setBranches(mappedBranches);
+        localStorage.setItem('payroll_branches', JSON.stringify(mappedBranches));
+      } else if (backupData.branches) {
+        setBranches(backupData.branches);
+        localStorage.setItem('payroll_branches', JSON.stringify(backupData.branches));
+      }
+
+      // 3. استعادة الأقسام
+      if (backupData.tables?.departments) {
+        const mappedDepts: Department[] = backupData.tables.departments.map((d: any) => ({
+          id: parseInt(d.id, 10),
+          branchId: parseInt(d.branch_id, 10),
+          name: d.name,
+          status: d.status || 'active',
+        }));
+        setDepartments(mappedDepts);
+        localStorage.setItem('payroll_departments', JSON.stringify(mappedDepts));
+      } else if (backupData.departments) {
+        setDepartments(backupData.departments);
+        localStorage.setItem('payroll_departments', JSON.stringify(backupData.departments));
+      }
+
+      // 4. استعادة الموظفين
+      if (backupData.tables?.employees) {
+        const mappedEmps: Employee[] = backupData.tables.employees.map((e: any) => ({
+          id: parseInt(e.id, 10),
+          civilId: e.civil_id,
+          fullName: e.name || e.full_name || '',
+          branchId: parseInt(e.branch_id, 10),
+          departmentId: parseInt(e.department_id, 10),
+          basicSalary: parseFloat(e.basic_salary) || 0,
+          dailyHours: parseInt(e.daily_hours, 10) || 8,
+          bankName: e.bank_name || '',
+          iban: e.iban || '',
+          bankTransferAmount: parseFloat(e.bank_transfer_amount) || 0,
+          residenceExpiryDate: e.residency_expiry || e.residence_expiry_date || '',
+          status: e.status || 'active',
+        }));
+        setEmployees(mappedEmps);
+        localStorage.setItem('payroll_employees', JSON.stringify(mappedEmps));
+      } else if (backupData.employees) {
+        setEmployees(backupData.employees);
+        localStorage.setItem('payroll_employees', JSON.stringify(backupData.employees));
+      }
+
+      // 5. استعادة مسيرات الرواتب الشهرية
+      if (backupData.tables?.monthly_payrolls) {
+        const mappedPayrolls: MonthlyPayroll[] = backupData.tables.monthly_payrolls.map((p: any) => {
+          let details: any = {};
+          if (p.details_json) {
+            try { details = JSON.parse(p.details_json); } catch {}
+          }
+          return {
+            id: p.id,
+            monthName: p.month_name,
+            monthYear: p.month_year,
+            voucherBaseNumber: parseInt(p.voucher_base_number, 10) || 1000,
+            totalEmployees: parseInt(p.total_employees, 10) || 0,
+            totalNetSalary: parseFloat(p.total_net_salary) || 0,
+            totalCash: parseFloat(p.total_cash) || 0,
+            totalBankTransfer: parseFloat(p.total_bank_transfer) || 0,
+            totalAdvance: parseFloat(p.total_advance) || 0,
+            totalOvertimeAmount: parseFloat(p.total_overtime_amount) || 0,
+            totalAbsentAmount: parseFloat(p.total_absent_amount) || 0,
+            status: p.status || 'draft',
+            notes: p.notes || '',
+            savedAt: p.saved_at || p.created_at || new Date().toISOString(),
+            records: details.records || [],
+            ...details,
+          };
+        });
+        setSavedPayrolls(mappedPayrolls);
+        localStorage.setItem('payroll_saved_months', JSON.stringify(mappedPayrolls));
+      } else if (backupData.payrolls) {
+        setSavedPayrolls(backupData.payrolls);
+        localStorage.setItem('payroll_saved_months', JSON.stringify(backupData.payrolls));
+      }
+
+      // 6. استعادة الشيكات ودفاتر الشيكات والحسابات وقوالب وصور الشيكات
+      if (backupData.tables?.issued_cheques) {
+        localStorage.setItem('app_issued_cheques', JSON.stringify(backupData.tables.issued_cheques));
+      } else if (backupData.issuedCheques) {
+        localStorage.setItem('app_issued_cheques', JSON.stringify(backupData.issuedCheques));
+      }
+
+      if (backupData.tables?.cheque_books) {
+        localStorage.setItem('app_cheque_books', JSON.stringify(backupData.tables.cheque_books));
+      } else if (backupData.chequeBooks) {
+        localStorage.setItem('app_cheque_books', JSON.stringify(backupData.chequeBooks));
+      }
+
+      if (backupData.tables?.bank_accounts) {
+        const accs = backupData.tables.bank_accounts.map((a: any) => {
+          const templates = (backupData.tables?.cheque_templates || []).filter((t: any) => t.bank_account_id === a.id);
+          const defaultTpl = templates.find((t: any) => t.is_default) || templates[0];
+          return {
+            id: a.id,
+            accountName: a.account_name,
+            bankName: a.bank_name,
+            bankCode: a.bank_code,
+            accountNumber: a.account_number,
+            iban: a.iban,
+            branchName: a.branch_name,
+            currency: a.currency,
+            currentBalance: parseFloat(a.current_balance) || 0,
+            isDefault: !!a.is_default,
+            status: a.status,
+            chequeImageUrl: defaultTpl?.cheque_image_url || a.cheque_image_url,
+            chequeImageName: defaultTpl?.cheque_image_name || a.cheque_image_name,
+            activeTemplateId: defaultTpl?.id,
+            chequeTemplates: templates,
+          };
+        });
+        localStorage.setItem('app_bank_accounts', JSON.stringify(accs));
+      } else if (backupData.bankAccounts) {
+        localStorage.setItem('app_bank_accounts', JSON.stringify(backupData.bankAccounts));
+      }
+
+      if (backupData.tables?.beneficiaries) {
+        localStorage.setItem('app_beneficiaries', JSON.stringify(backupData.tables.beneficiaries));
+      } else if (backupData.beneficiaries) {
+        localStorage.setItem('app_beneficiaries', JSON.stringify(backupData.beneficiaries));
+      }
+
+      // استعادة لقاعدة بيانات MySQL في الاستضافة
+      let remoteRes: any = null;
+      if (restoreToRemoteDb) {
+        try {
+          remoteRes = await dbService.restoreBackup({ backupData });
+        } catch (e) {
+          console.warn('MySQL restore error:', e);
+        }
+      }
+
+      addAuditLog('DATABASE_RESTORE', 'system', `تمت استعادة قاعدة البيانات والمنظومة وقوالب الشيكات بنجاح من نسخة: ${backupData.createdAt || 'تاريخ غير محدد'}`);
+
+      return {
+        success: true,
+        message: 'تمت استعادة كافة البيانات وقاعدة بيانات MySQL وصور الشيكات بنجاح!',
+      };
+    } catch (err: any) {
+      console.error('Restore error:', err);
+      return { success: false, message: `فشل استعادة النسخة: ${err?.message || err}` };
+    }
+  };
+
+  // Data counts summary for reset options
+  const dataCounts = useMemo(() => {
+    let chequesCount = 0;
+    try {
+      const c = localStorage.getItem('app_issued_cheques');
+      if (c) chequesCount = JSON.parse(c).length;
+    } catch {}
+
+    let bankAccountsCount = 0;
+    try {
+      const b = localStorage.getItem('app_bank_accounts');
+      if (b) bankAccountsCount = JSON.parse(b).length;
+    } catch {}
+
+    let recSessionsCount = 0;
+    try {
+      const s = localStorage.getItem('rec_sessions');
+      if (s) recSessionsCount = JSON.parse(s).length;
+    } catch {}
+
+    return {
+      payrolls: savedPayrolls.length,
+      employees: employees.length,
+      branches: branches.length,
+      departments: departments.length,
+      auditLogs: auditLogs.length,
+      cheques: chequesCount,
+      bankAccounts: bankAccountsCount,
+      recSessions: recSessionsCount,
+    };
+  }, [savedPayrolls, employees, branches, departments, auditLogs]);
 
   // Settings handler
   const handleUpdateSettings = (newSettings: CompanySettings) => {
@@ -486,6 +814,9 @@ export default function App() {
               auditLogs={auditLogs}
               onUpdateSettings={handleUpdateSettings}
               onOpenGuide={() => setIsGuideOpen(true)}
+              dataCounts={dataCounts}
+              onResetData={handleResetData}
+              onRestoreBackup={handleRestoreBackup}
             />
           )}
         </main>

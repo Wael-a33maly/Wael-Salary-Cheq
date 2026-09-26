@@ -307,6 +307,37 @@ if ($action === 'bootstrap') {
         $employees = $pdo->query("SELECT * FROM employees ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $companySettings = $pdo->query("SELECT * FROM settings WHERE id = 1 LIMIT 1")->fetch(PDO::FETCH_ASSOC);
 
+        // مسيرات الرواتب الشهرية المعتمدة
+        $payrolls = [];
+        try {
+            $payrollsStmt = $pdo->query("SELECT * FROM monthly_payrolls ORDER BY year DESC, month DESC");
+            while ($p = $payrollsStmt->fetch(PDO::FETCH_ASSOC)) {
+                $empIds = !empty($p['employee_ids']) ? json_decode($p['employee_ids'], true) : [];
+                $inputs = !empty($p['inputs_json']) ? json_decode($p['inputs_json'], true) : new stdClass();
+                $payrolls[] = [
+                    'id' => $p['id'],
+                    'year' => (int)$p['year'],
+                    'month' => (int)$p['month'],
+                    'monthName' => $p['month_name'],
+                    'daysInMonth' => (int)$p['days_in_month'],
+                    'voucherBaseNumber' => !empty($p['voucher_base_number']) ? (int)$p['voucher_base_number'] : 1001,
+                    'status' => $p['status'] ?? 'approved',
+                    'employeeIds' => is_array($empIds) ? $empIds : [],
+                    'inputs' => is_array($inputs) ? $inputs : (is_object($inputs) ? (array)$inputs : []),
+                    'totals' => [
+                        'basic' => (float)$p['total_basic_salary'],
+                        'net' => (float)$p['total_net_salary'],
+                        'bank' => (float)$p['total_bank'],
+                        'finalCash' => (float)$p['total_cash'],
+                        'roundingDiff' => (float)$p['total_rounding_diff'],
+                    ],
+                    'updatedAt' => $p['updated_at'] ?? $p['calculated_at'],
+                ];
+            }
+        } catch (Throwable $pe) {
+            // الجدول قد لا يكون منشأ بعد في النسخ القديمة
+        }
+
         echo json_encode([
             'success' => true,
             'data' => [
@@ -321,6 +352,7 @@ if ($action === 'bootstrap') {
                 'departments' => $departments,
                 'employees' => $employees,
                 'companySettings' => $companySettings,
+                'payrolls' => $payrolls,
             ]
         ], JSON_UNESCAPED_UNICODE);
         exit;
@@ -1174,6 +1206,601 @@ if ($action === 'get_session_details') {
                 'differences' => $differences,
             ]
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 11. حفظ مسير رواتب شهري في قاعدة بيانات MySQL
+// =========================================================================
+if ($action === 'save_payroll') {
+    try {
+        $p = $inputData;
+        if (empty($p['id']) || empty($p['year']) || empty($p['month'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'بيانات مسير الرواتب غير مكتملة'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // إنشاء الجدول إن لم يكن موجوداً
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `monthly_payrolls` (
+                `id` VARCHAR(50) PRIMARY KEY,
+                `year` SMALLINT UNSIGNED NOT NULL,
+                `month` TINYINT UNSIGNED NOT NULL,
+                `month_name` VARCHAR(50) NOT NULL,
+                `days_in_month` TINYINT UNSIGNED NOT NULL DEFAULT 30,
+                `voucher_base_number` INT UNSIGNED DEFAULT 1001,
+                `employee_ids` LONGTEXT DEFAULT NULL,
+                `inputs_json` LONGTEXT DEFAULT NULL,
+                `total_basic_salary` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+                `total_net_salary` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+                `total_bank` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+                `total_cash` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+                `total_rounding_diff` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+                `status` VARCHAR(20) NOT NULL DEFAULT 'approved',
+                `calculated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX (`year`),
+                INDEX (`month`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare("
+            INSERT INTO monthly_payrolls (
+                id, year, month, month_name, days_in_month, voucher_base_number,
+                employee_ids, inputs_json, total_basic_salary, total_net_salary,
+                total_bank, total_cash, total_rounding_diff, status, calculated_at
+            ) VALUES (
+                :id, :year, :month, :month_name, :days, :voucher,
+                :emp_ids, :inputs, :basic, :net,
+                :bank, :cash, :rounding, :status, NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                days_in_month = VALUES(days_in_month),
+                voucher_base_number = VALUES(voucher_base_number),
+                employee_ids = VALUES(employee_ids),
+                inputs_json = VALUES(inputs_json),
+                total_basic_salary = VALUES(total_basic_salary),
+                total_net_salary = VALUES(total_net_salary),
+                total_bank = VALUES(total_bank),
+                total_cash = VALUES(total_cash),
+                total_rounding_diff = VALUES(total_rounding_diff),
+                status = VALUES(status),
+                updated_at = NOW()
+        ");
+
+        $stmt->execute([
+            ':id' => $p['id'],
+            ':year' => (int)$p['year'],
+            ':month' => (int)$p['month'],
+            ':month_name' => $p['monthName'] ?? ($p['year'] . '-' . $p['month']),
+            ':days' => (int)($p['daysInMonth'] ?? 30),
+            ':voucher' => (int)($p['voucherBaseNumber'] ?? 1001),
+            ':emp_ids' => json_encode($p['employeeIds'] ?? [], JSON_UNESCAPED_UNICODE),
+            ':inputs' => json_encode($p['inputs'] ?? new stdClass(), JSON_UNESCAPED_UNICODE),
+            ':basic' => (float)($p['totals']['basic'] ?? 0),
+            ':net' => (float)($p['totals']['net'] ?? 0),
+            ':bank' => (float)($p['totals']['bank'] ?? 0),
+            ':cash' => (float)($p['totals']['finalCash'] ?? 0),
+            ':rounding' => (float)($p['totals']['roundingDiff'] ?? 0),
+            ':status' => $p['status'] ?? 'approved',
+        ]);
+
+        // حفظ وتحديث السجلات الشهرية للموظفين في monthly_records
+        if (!empty($p['inputs']) && is_array($p['inputs'])) {
+            $recStmt = $pdo->prepare("
+                INSERT INTO monthly_records (
+                    employee_id, month, year, absent_days, absent_hours, overtime_hours, advance_deduction
+                ) VALUES (
+                    :emp_id, :month, :year, :abs_d, :abs_h, :ot_h, :adv
+                )
+                ON DUPLICATE KEY UPDATE
+                    absent_days = VALUES(absent_days),
+                    absent_hours = VALUES(absent_hours),
+                    overtime_hours = VALUES(overtime_hours),
+                    advance_deduction = VALUES(advance_deduction),
+                    updated_at = NOW()
+            ");
+
+            foreach ($p['inputs'] as $empId => $inp) {
+                if (!is_numeric($empId)) continue;
+                $recStmt->execute([
+                    ':emp_id' => (int)$empId,
+                    ':month' => (int)$p['month'],
+                    ':year' => (int)$p['year'],
+                    ':abs_d' => (float)($inp['absentDays'] ?? 0),
+                    ':abs_h' => (float)($inp['absentHours'] ?? 0),
+                    ':ot_h' => (float)($inp['overtimeHours'] ?? 0),
+                    ':adv' => (float)($inp['advanceDeduction'] ?? 0),
+                ]);
+            }
+        }
+
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'تم حفظ مسير الرواتب بنجاح في قاعدة بيانات MySQL', 'id' => $p['id']], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 12. حذف مسير رواتب من قاعدة البيانات
+// =========================================================================
+if ($action === 'delete_payroll') {
+    try {
+        $id = trim($_GET['id'] ?? ($inputData['id'] ?? ''));
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'معرف المسير مطلوب للحذف'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $pdo->beginTransaction();
+
+        $checkStmt = $pdo->prepare("SELECT year, month FROM monthly_payrolls WHERE id = :id LIMIT 1");
+        $checkStmt->execute([':id' => $id]);
+        $row = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row) {
+            $delRec = $pdo->prepare("DELETE FROM monthly_records WHERE year = :y AND month = :m");
+            $delRec->execute([':y' => $row['year'], ':m' => $row['month']]);
+
+            $delSlips = $pdo->prepare("DELETE FROM payslips WHERE year = :y AND month = :m");
+            $delSlips->execute([':y' => $row['year'], ':m' => $row['month']]);
+        }
+
+        $delBatch = $pdo->prepare("DELETE FROM monthly_payrolls WHERE id = :id");
+        $delBatch->execute([':id' => $id]);
+
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'تم حذف كارت مسير الرواتب وسجلاته من قاعدة البيانات بنجاح'], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 13. نظام إعادة التعيين وحذف كامل البيانات المحددة (Selective Data Reset / Wipe)
+// =========================================================================
+if ($action === 'reset_data') {
+    try {
+        $items = $inputData['items'] ?? [];
+        if (!is_array($items) || empty($items)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'يرجى اختيار بند واحد على الأقل لإعادة التعيين'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 0;");
+        $wiped = [];
+        $wipeAll = in_array('all', $items, true);
+
+        // 1. مسيرات الرواتب وسجلات الموظفين الشهرية
+        if ($wipeAll || in_array('payrolls', $items, true)) {
+            $pdo->exec("TRUNCATE TABLE monthly_payrolls;");
+            $pdo->exec("TRUNCATE TABLE monthly_records;");
+            $pdo->exec("TRUNCATE TABLE payslips;");
+            $wiped[] = 'مسيرات وقسائم الرواتب';
+        }
+
+        // 2. الموظفين
+        if ($wipeAll || in_array('employees', $items, true)) {
+            $pdo->exec("TRUNCATE TABLE employees;");
+            $pdo->exec("TRUNCATE TABLE monthly_records;");
+            $pdo->exec("TRUNCATE TABLE payslips;");
+            $wiped[] = 'سجلات الموظفين';
+        }
+
+        // 3. الفروع والأقسام
+        if ($wipeAll || in_array('branches_departments', $items, true)) {
+            $pdo->exec("TRUNCATE TABLE departments;");
+            $pdo->exec("TRUNCATE TABLE branches;");
+            $wiped[] = 'الفروع والأقسام';
+        }
+
+        // 4. الشيكات المصدرة ودفاتر الشيكات
+        if ($wipeAll || in_array('cheques', $items, true)) {
+            $pdo->exec("TRUNCATE TABLE issued_cheques;");
+            $pdo->exec("TRUNCATE TABLE cheque_books;");
+            $wiped[] = 'الشيكات المصدرة ودفاتر الشيكات';
+        }
+
+        // 5. الحسابات البنكية والمستفيدين
+        if ($wipeAll || in_array('bank_accounts_beneficiaries', $items, true)) {
+            $preserveImages = !empty($inputData['preserveChequeImages']);
+            if (!$preserveImages) {
+                $pdo->exec("TRUNCATE TABLE cheque_templates;");
+            }
+            $pdo->exec("TRUNCATE TABLE beneficiaries;");
+            $pdo->exec("TRUNCATE TABLE bank_accounts;");
+            $wiped[] = 'الحسابات البنكية والمستفيدين' . ($preserveImages ? ' (مع حماية صور وقوالب الشيكات)' : '');
+        }
+
+        // 6. جلسات مطابقة البنك والحركات
+        if ($wipeAll || in_array('reconciliation', $items, true)) {
+            $pdo->exec("TRUNCATE TABLE reconciliation_journal_entries;");
+            $pdo->exec("TRUNCATE TABLE reconciliation_diffs;");
+            $pdo->exec("TRUNCATE TABLE reconciliation_ledger_tx;");
+            $pdo->exec("TRUNCATE TABLE reconciliation_bank_tx;");
+            $pdo->exec("TRUNCATE TABLE reconciliation_sessions;");
+            $wiped[] = 'مطابقة كشف الحساب البنكي والحركات';
+        }
+
+        // 7. سجل العمليات والتدقيق
+        if ($wipeAll || in_array('audit_logs', $items, true)) {
+            $pdo->exec("TRUNCATE TABLE audit_log;");
+            $wiped[] = 'سجل التدقيق وتتبع العمليات';
+        }
+
+        // 8. إعدادات النظام ومعايرة الطباعة
+        if ($wipeAll || in_array('settings', $items, true)) {
+            $pdo->exec("UPDATE settings SET company_name = 'شركة الأعمال للتجارة والمقاولات', overtime_multiplier = 1.25, residency_alert_days = 60, rounding_step = 0.050 WHERE id = 1;");
+            $pdo->exec("UPDATE cheque_print_settings SET offset_x = 0, offset_y = 0, show_background_on_print = 0, default_crossing = 1, default_bearer_crossing = 1 WHERE id = 1;");
+            $pdo->exec("UPDATE reconciliation_settings SET auto_extract_differences = 1, small_difference_limit = 1.000 WHERE id = 1;");
+            $wiped[] = 'إعدادات المنشأة والطباعة';
+        }
+
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
+
+        // تسجيل العملية في audit_log
+        try {
+            $stmt = $pdo->prepare("INSERT INTO audit_log (action, table_name, details, ip_address, created_at) VALUES ('SYSTEM_RESET', 'system', :details, :ip, NOW())");
+            $stmt->execute([
+                ':details' => 'إعادة تعيين وحذف البيانات المحددة: ' . implode('، ', $wiped),
+                ':ip' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+            ]);
+        } catch (Throwable $e) {}
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'تم إعادة التعيين وحذف البيانات المحددة بنجاح من قاعدة بيانات MySQL',
+            'wiped' => $wiped
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 14. إنشاء نسخة احتياطية كاملة لقاعدة البيانات وصور الشيكات (Create Backup)
+// =========================================================================
+if ($action === 'create_backup') {
+    try {
+        $backupDir = dirname(__DIR__) . '/backups';
+        if (!is_dir($backupDir)) {
+            @mkdir($backupDir, 0755, true);
+            // حماية مجلد النسخ الاحتياطية من التصفح أو التحميل المباشر
+            @file_put_contents($backupDir . '/.htaccess', "Options -Indexes\nRequire all denied\n");
+        }
+
+        $tables = [
+            'settings',
+            'branches',
+            'departments',
+            'employees',
+            'monthly_records',
+            'payslips',
+            'monthly_payrolls',
+            'bank_accounts',
+            'cheque_templates',
+            'cheque_books',
+            'beneficiaries',
+            'issued_cheques',
+            'cheque_print_settings',
+            'reconciliation_settings',
+            'reconciliation_sessions',
+            'reconciliation_bank_tx',
+            'reconciliation_ledger_tx',
+            'reconciliation_diffs',
+            'reconciliation_journal_entries',
+            'users',
+            'audit_log'
+        ];
+
+        $backupData = [
+            'version' => '1.0',
+            'createdAt' => date('Y-m-d H:i:s'),
+            'type' => $inputData['type'] ?? 'manual',
+            'notes' => $inputData['notes'] ?? 'نسخة احتياطية لقاعدة البيانات والمنظومة',
+            'tables' => [],
+            'chequeImages' => [],
+            'customPath' => $inputData['customPath'] ?? 'uploads/cheques',
+        ];
+
+        $totalRecords = 0;
+        foreach ($tables as $tbl) {
+            try {
+                $stmt = $pdo->query("SELECT * FROM `{$tbl}`");
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $backupData['tables'][$tbl] = $rows;
+                $totalRecords += count($rows);
+            } catch (Throwable $te) {
+                $backupData['tables'][$tbl] = [];
+            }
+        }
+
+        // جمع صور وقوالب الشيكات إن وجدت
+        $tplStmt = $pdo->query("SELECT id, name, cheque_image_url, cheque_image_name FROM cheque_templates WHERE cheque_image_url IS NOT NULL");
+        $chequeImages = [];
+        while ($r = $tplStmt->fetch(PDO::FETCH_ASSOC)) {
+            $chequeImages[] = [
+                'templateId' => $r['id'],
+                'templateName' => $r['name'],
+                'imageUrl' => $r['cheque_image_url'],
+                'imageName' => $r['cheque_image_name'],
+            ];
+        }
+        $backupData['chequeImages'] = $chequeImages;
+
+        $timestamp = date('Y-m-d_H-i-s');
+        $filename = "backup_payroll_db_{$timestamp}.json";
+        $filepath = $backupDir . '/' . $filename;
+        $jsonContent = json_encode($backupData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        
+        file_put_contents($filepath, $jsonContent);
+        $sizeBytes = filesize($filepath);
+
+        // تنظيف النسخ القديمة بناءً على حد الاحتفاظ retentionCount
+        $retention = max(3, (int)($inputData['retentionCount'] ?? 14));
+        $allBackups = glob($backupDir . '/backup_payroll_db_*.json');
+        if (count($allBackups) > $retention) {
+            usort($allBackups, fn($a, $b) => filemtime($a) <=> filemtime($b));
+            $toDelete = array_slice($allBackups, 0, count($allBackups) - $retention);
+            foreach ($toDelete as $df) {
+                @unlink($df);
+            }
+        }
+
+        // تسجيل في audit_log
+        try {
+            $stmt = $pdo->prepare("INSERT INTO audit_log (action, table_name, details, ip_address, created_at) VALUES ('BACKUP_CREATE', 'system', :details, :ip, NOW())");
+            $stmt->execute([
+                ':details' => "إنشاء نسخة احتياطية: {$filename} ({$totalRecords} سجل، " . count($chequeImages) . " صور شيكات)",
+                ':ip' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+            ]);
+        } catch (Throwable $e) {}
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'تم إنشاء النسخة الاحتياطية لقاعدة البيانات بنجاح',
+            'backup' => [
+                'id' => $filename,
+                'filename' => $filename,
+                'createdAt' => date('Y-m-d H:i:s'),
+                'sizeBytes' => $sizeBytes,
+                'sizeFormatted' => round($sizeBytes / 1024, 2) . ' KB',
+                'type' => $backupData['type'],
+                'tablesCount' => count($tables),
+                'recordsCount' => $totalRecords,
+                'hasChequeImages' => count($chequeImages) > 0,
+                'chequeImagesCount' => count($chequeImages),
+            ],
+            'backupData' => $backupData,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 15. استعراض قائمة النسخ الاحتياطية المتوفرة (List Backups)
+// =========================================================================
+if ($action === 'list_backups') {
+    try {
+        $backupDir = dirname(__DIR__) . '/backups';
+        $backups = [];
+
+        if (is_dir($backupDir)) {
+            $files = glob($backupDir . '/backup_payroll_db_*.json');
+            usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
+
+            foreach ($files as $file) {
+                $filename = basename($file);
+                $content = @file_get_contents($file);
+                $json = json_decode($content, true) ?? [];
+                $sizeBytes = filesize($file);
+
+                $totalRecs = 0;
+                if (!empty($json['tables']) && is_array($json['tables'])) {
+                    foreach ($json['tables'] as $rows) {
+                        if (is_array($rows)) $totalRecs += count($rows);
+                    }
+                }
+
+                $backups[] = [
+                    'id' => $filename,
+                    'filename' => $filename,
+                    'createdAt' => $json['createdAt'] ?? date('Y-m-d H:i:s', filemtime($file)),
+                    'sizeBytes' => $sizeBytes,
+                    'sizeFormatted' => round($sizeBytes / 1024, 2) . ' KB',
+                    'type' => $json['type'] ?? 'scheduled',
+                    'tablesCount' => !empty($json['tables']) ? count($json['tables']) : 21,
+                    'recordsCount' => $totalRecs,
+                    'hasChequeImages' => !empty($json['chequeImages']) && count($json['chequeImages']) > 0,
+                    'chequeImagesCount' => !empty($json['chequeImages']) ? count($json['chequeImages']) : 0,
+                    'notes' => $json['notes'] ?? '',
+                ];
+            }
+        }
+
+        echo json_encode(['success' => true, 'backups' => $backups], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 16. استعادة قاعدة البيانات من نسخة احتياطية (Restore Backup)
+// =========================================================================
+if ($action === 'restore_backup') {
+    try {
+        $backupData = null;
+
+        if (!empty($inputData['backupData']) && is_array($inputData['backupData'])) {
+            $backupData = $inputData['backupData'];
+        } elseif (!empty($inputData['filename'])) {
+            $backupDir = dirname(__DIR__) . '/backups';
+            $safeName = basename($inputData['filename']);
+            $filePath = $backupDir . '/' . $safeName;
+            if (file_exists($filePath)) {
+                $backupData = json_decode(file_get_contents($filePath), true);
+            }
+        }
+
+        if (empty($backupData) || empty($backupData['tables'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'ملف النسخة الاحتياطية غير صالح أو فارغ'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 0;");
+        $pdo->beginTransaction();
+
+        $restoredTables = [];
+        $restoredRecords = 0;
+
+        foreach ($backupData['tables'] as $tbl => $rows) {
+            if (!is_array($rows)) continue;
+
+            // إفراغ الجدول أولاً
+            try {
+                $pdo->exec("TRUNCATE TABLE `{$tbl}`;");
+            } catch (Throwable $te) {
+                continue;
+            }
+
+            if (!empty($rows)) {
+                $firstRow = $rows[0];
+                $cols = array_keys($firstRow);
+                $escapedCols = array_map(fn($c) => "`{$c}`", $cols);
+                $placeholders = array_map(fn($c) => ":{$c}", $cols);
+
+                $sql = "INSERT INTO `{$tbl}` (" . implode(', ', $escapedCols) . ") VALUES (" . implode(', ', $placeholders) . ")";
+                $insertStmt = $pdo->prepare($sql);
+
+                foreach ($rows as $row) {
+                    $insertStmt->execute($row);
+                    $restoredRecords++;
+                }
+            }
+            $restoredTables[] = $tbl;
+        }
+
+        // استعادة قوالب وصور الشيكات المرفوعة إن كانت موجودة
+        $restoredImagesCount = 0;
+        if (!empty($backupData['chequeImages']) && is_array($backupData['chequeImages'])) {
+            $updateTplStmt = $pdo->prepare("UPDATE cheque_templates SET cheque_image_url = :url, cheque_image_name = :name WHERE id = :id");
+            foreach ($backupData['chequeImages'] as $img) {
+                if (!empty($img['templateId']) && !empty($img['imageUrl'])) {
+                    try {
+                        $updateTplStmt->execute([
+                            ':url' => $img['imageUrl'],
+                            ':name' => $img['imageName'] ?? '',
+                            ':id' => $img['templateId']
+                        ]);
+                        $restoredImagesCount++;
+                    } catch (Throwable $e) {}
+                }
+            }
+        }
+
+        $pdo->commit();
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
+
+        // تسجيل العملية في audit_log
+        try {
+            $stmt = $pdo->prepare("INSERT INTO audit_log (action, table_name, details, ip_address, created_at) VALUES ('DATABASE_RESTORE', 'system', :details, :ip, NOW())");
+            $stmt->execute([
+                ':details' => "استعادة قاعدة البيانات بالكامل: " . count($restoredTables) . " جداول، {$restoredRecords} سجلات، {$restoredImagesCount} صور شيكات",
+                ':ip' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+            ]);
+        } catch (Throwable $e) {}
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'تمت استعادة كامل قاعدة البيانات وصور الشيكات بنجاح',
+            'restoredTablesCount' => count($restoredTables),
+            'restoredRecords' => $restoredRecords,
+            'restoredImagesCount' => $restoredImagesCount,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 17. حذف نسخة احتياطية من الخادم (Delete Backup)
+// =========================================================================
+if ($action === 'delete_backup') {
+    try {
+        $id = basename($_GET['id'] ?? ($inputData['id'] ?? ''));
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'معرف النسخة مطلوب للحذف'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $backupDir = dirname(__DIR__) . '/backups';
+        $filePath = $backupDir . '/' . $id;
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+            echo json_encode(['success' => true, 'message' => 'تم حذف ملف النسخة الاحتياطية بنجاح'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'ملف النسخة الاحتياطية غير موجود'], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
+// 18. حفظ إعدادات الجدولة والمسار المخصص لصور الشيكات
+// =========================================================================
+if ($action === 'save_backup_settings') {
+    try {
+        $configDir = dirname(__DIR__) . '/config';
+        $configFile = $configDir . '/backup_config.json';
+        $cfg = $inputData['backupConfig'] ?? [];
+
+        file_put_contents($configFile, json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+
+        echo json_encode(['success' => true, 'message' => 'تم حفظ إعدادات جدولة النسخ الاحتياطي ومسار صور الشيكات بنجاح'], JSON_UNESCAPED_UNICODE);
         exit;
     } catch (Throwable $e) {
         http_response_code(500);

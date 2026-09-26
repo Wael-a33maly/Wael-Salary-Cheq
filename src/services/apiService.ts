@@ -9,6 +9,9 @@ import {
   Beneficiary, 
   IssuedCheque, 
   ChequePrintSettings,
+  MonthlyPayroll,
+  BackupScheduleConfig,
+  BackupItem,
 } from '../types';
 import { 
   BankReconciliationSession, 
@@ -34,6 +37,7 @@ export interface DatabaseBootstrapData {
   departments?: any[];
   employees?: any[];
   companySettings?: any;
+  payrolls?: MonthlyPayroll[];
 }
 
 export interface ApiStatus {
@@ -323,6 +327,229 @@ class DatabaseService {
     } catch (err) {
       console.warn('Error fetching session details from DB:', err);
       return null;
+    }
+  }
+
+  /**
+   * حفظ أو تحديث مسير رواتب شهري في قاعدة بيانات MySQL
+   */
+  async savePayrollToDb(payroll: MonthlyPayroll): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=save_payroll`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(payroll),
+      });
+
+      if (!res.ok) return false;
+      const json = await res.json();
+      return !!json.success;
+    } catch (err) {
+      console.warn('Error saving payroll to DB:', err);
+      return false;
+    }
+  }
+
+  /**
+   * حذف كارت مسير رواتب من قاعدة بيانات MySQL
+   */
+  async deletePayrollFromDb(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=delete_payroll&id=${encodeURIComponent(id)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!res.ok) return false;
+      const json = await res.json();
+      return !!json.success;
+    } catch (err) {
+      console.warn('Error deleting payroll from DB:', err);
+      return false;
+    }
+  }
+
+  /**
+   * نظام إعادة التعيين وحذف البيانات المحددة في قاعدة بيانات MySQL
+   */
+  async resetDataInDb(items: string[], preserveChequeImages = true): Promise<{ success: boolean; message?: string; wiped?: string[] }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=reset_data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ items, preserveChequeImages }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        return { success: false, message: `فشل الحذف من الخادم (${res.status}): ${text}` };
+      }
+      const json = await res.json();
+      return {
+        success: !!json.success,
+        message: json.message || 'تمت إعادة تعيين البيانات في قاعدة البيانات بنجاح',
+        wiped: json.wiped,
+      };
+    } catch (err: any) {
+      console.warn('Error resetting DB data:', err);
+      return {
+        success: false,
+        message: err?.message || 'تعذر الاتصال بخادم قاعدة البيانات لمسح البيانات عن بعد'
+      };
+    }
+  }
+
+  /**
+   * إنشاء نسخة احتياطية فورية لقاعدة البيانات وصور الشيكات
+   */
+  async createBackup(params?: {
+    type?: 'scheduled' | 'manual';
+    notes?: string;
+    retentionCount?: number;
+    customPath?: string;
+  }): Promise<{ success: boolean; message: string; backup?: BackupItem; backupData?: any }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=create_backup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(params || {}),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        return { success: false, message: `فشل إنشاء النسخة الاحتياطية (${res.status}): ${text}` };
+      }
+      const json = await res.json();
+      return {
+        success: !!json.success,
+        message: json.message || 'تم إنشاء النسخة الاحتياطية بنجاح',
+        backup: json.backup,
+        backupData: json.backupData,
+      };
+    } catch (err: any) {
+      console.warn('Error creating backup in DB:', err);
+      return {
+        success: false,
+        message: err?.message || 'تعذر الاتصال بالخادم لإنشاء النسخة الاحتياطية'
+      };
+    }
+  }
+
+  /**
+   * جلب قائمة النسخ الاحتياطية المتوفرة على الخادم
+   */
+  async listBackups(): Promise<BackupItem[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=list_backups`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.success && Array.isArray(json.backups) ? json.backups : [];
+    } catch (err) {
+      console.warn('Error listing backups:', err);
+      return [];
+    }
+  }
+
+  /**
+   * استعادة قاعدة البيانات وصور الشيكات من نسخة احتياطية
+   */
+  async restoreBackup(params: {
+    filename?: string;
+    backupData?: any;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    restoredTablesCount?: number;
+    restoredRecords?: number;
+    restoredImagesCount?: number;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=restore_backup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        return { success: false, message: `فشل استعادة النسخة الاحتياطية (${res.status}): ${text}` };
+      }
+      const json = await res.json();
+      return {
+        success: !!json.success,
+        message: json.message || 'تمت استعادة قاعدة البيانات بنجاح',
+        restoredTablesCount: json.restoredTablesCount,
+        restoredRecords: json.restoredRecords,
+        restoredImagesCount: json.restoredImagesCount,
+      };
+    } catch (err: any) {
+      console.warn('Error restoring backup in DB:', err);
+      return {
+        success: false,
+        message: err?.message || 'تعذر الاتصال بالخادم لتنفيذ الاستعادة'
+      };
+    }
+  }
+
+  /**
+   * حذف نسخة احتياطية من الخادم
+   */
+  async deleteBackup(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=delete_backup&id=${encodeURIComponent(id)}`, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!res.ok) return false;
+      const json = await res.json();
+      return !!json.success;
+    } catch (err) {
+      console.warn('Error deleting backup:', err);
+      return false;
+    }
+  }
+
+  /**
+   * حفظ إعدادات جدولة النسخ الاحتياطي ومسار صور الشيكات
+   */
+  async saveBackupSettings(config: BackupScheduleConfig): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=save_backup_settings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ backupConfig: config }),
+      });
+
+      if (!res.ok) return false;
+      const json = await res.json();
+      return !!json.success;
+    } catch (err) {
+      console.warn('Error saving backup settings:', err);
+      return false;
     }
   }
 }

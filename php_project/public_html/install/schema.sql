@@ -505,6 +505,30 @@ CREATE TABLE IF NOT EXISTS `reconciliation_jvs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
+-- 21) جدول مسيرات الرواتب الشهرية المعتمدة (monthly_payrolls)
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `monthly_payrolls` (
+  `id` VARCHAR(50) PRIMARY KEY COMMENT 'معرف المسير مثل 2026-10',
+  `year` SMALLINT UNSIGNED NOT NULL,
+  `month` TINYINT UNSIGNED NOT NULL,
+  `month_name` VARCHAR(50) NOT NULL,
+  `days_in_month` TINYINT UNSIGNED NOT NULL DEFAULT 30,
+  `voucher_base_number` INT UNSIGNED DEFAULT 1001,
+  `employee_ids` LONGTEXT DEFAULT NULL COMMENT 'JSON array of selected employee IDs',
+  `inputs_json` LONGTEXT DEFAULT NULL COMMENT 'JSON object of employee input records',
+  `total_basic_salary` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+  `total_net_salary` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+  `total_bank` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+  `total_cash` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+  `total_rounding_diff` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'approved',
+  `calculated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX (`year`),
+  INDEX (`month`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
 -- إدراج البيانات الأولية الافتراضية للبنوك والشيكات والمطابقة
 -- --------------------------------------------------------
 INSERT INTO `bank_accounts` (`id`, `account_name`, `bank_name`, `bank_code`, `account_number`, `iban`, `branch_name`, `currency`, `current_balance`, `is_default`, `status`, `cheque_template`, `cheque_width_cm`, `cheque_height_cm`, `cheque_image_url`, `active_template_id`)

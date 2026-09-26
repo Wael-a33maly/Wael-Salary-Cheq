@@ -22,10 +22,13 @@ import {
   CheckSquare,
   Square,
   ChevronLeft,
-  Copy
+  Copy,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 import { Employee, Branch, Department, CompanySettings, MonthlyPayroll, MonthlyInputRecord } from '../types';
 import { roundCashDown } from '../mockData';
+import { dbService } from '../services/apiService';
 
 interface PayrollViewProps {
   employees: Employee[];
@@ -72,6 +75,32 @@ export function PayrollView({
   const [inputs, setInputs] = useState<Record<number, MonthlyInputRecord>>({});
   const [savedSuccessMessage, setSavedSuccessMessage] = useState<string | null>(null);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all');
+
+  // Database Connection & Sync Status
+  const [dbConnected, setDbConnected] = useState<boolean>(false);
+  const [dbSyncMessage, setDbSyncMessage] = useState<string>('جاري فحص الاتصال بقاعدة البيانات...');
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  useEffect(() => {
+    dbService.checkConnection().then((st) => {
+      setDbConnected(st.isConnected);
+      setDbSyncMessage(st.message);
+      if (st.lastSync) setLastSyncTime(st.lastSync);
+    });
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      const st = await dbService.checkConnection();
+      setDbConnected(st.isConnected);
+      setDbSyncMessage(st.message);
+      setLastSyncTime(new Date().toLocaleTimeString('ar-KW'));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Single payslip modal
   const [activePayslipEmployee, setActivePayslipEmployee] = useState<any | null>(null);
@@ -330,6 +359,45 @@ export function PayrollView({
 
   return (
     <div className="max-w-7xl mx-auto py-6 space-y-6">
+
+      {/* شريط حالة الاتصال والمزامنة الفورية لمسيرات الرواتب مع قاعدة بيانات MySQL */}
+      <div className={`p-3.5 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs font-sans print:hidden shadow-xs transition ${
+        dbConnected 
+          ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950' 
+          : 'bg-slate-50 border-slate-200 text-slate-700'
+      }`}>
+        <div className="flex items-center gap-3">
+          <span className={`w-3 h-3 rounded-full shrink-0 ${dbConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
+          <div className="flex items-center gap-2">
+            <Database className={`w-4 h-4 ${dbConnected ? 'text-emerald-600' : 'text-slate-500'}`} />
+            <span className="font-bold">
+              {dbConnected 
+                ? '🟢 تبويب الرواتب متصل بقاعدة بيانات MySQL المركزية على الدومين (مزامنة حية لمسيرات الرواتب وسجلات الموظفين وقسائم الصرف)' 
+                : '💾 تبويب الرواتب يعمل في وضع التخزين المحلي (سيتم الحفظ التلقائي في MySQL عند الاتصال بالدومين)'}
+            </span>
+            <span className="text-[11px] text-slate-500 hidden md:inline">
+              — {dbSyncMessage}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastSyncTime && (
+            <span className="text-[11px] text-slate-500 font-mono">
+              آخر مزامنة: {lastSyncTime}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl border border-slate-300 shadow-2xs transition text-[11px] disabled:opacity-50"
+            title="فحص الاتصال والمزامنة الفورية مع MySQL"
+          >
+            <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+            <span>{isSyncing ? 'جاري الفحص...' : 'تحديث الاتصال بـ MySQL'}</span>
+          </button>
+        </div>
+      </div>
       
       {/* ========================================================= */}
       {/* 1. CARDS VIEW (كروت علي الشاشة لكل شهر تم حفظة) */}

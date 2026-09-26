@@ -94,6 +94,34 @@ export interface CompanySettings {
   receiptAmountType?: 'net' | 'cash' | 'bank'; // نوع المبلغ المطبوع بالإيصال: صافي، نقدي، أو بنكي
   defaultVoucherBase?: number; // رقم السند الورقي الافتراضي
   chequePrintSettings?: ChequePrintSettings;
+  backupConfig?: BackupScheduleConfig;
+}
+
+export interface BackupScheduleConfig {
+  enabled: boolean;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'manual';
+  scheduledTime: string; // e.g. "02:00"
+  retentionCount: number; // e.g. 14
+  autoIncludeUploads: boolean; // تضمين صور وقوالب الشيكات في النسخة
+  chequeImagesCustomPath: string; // المسار المخصص لتخزين صور الشيكات على الاستضافة e.g. uploads/cheques
+  preserveImagesOnReset: boolean; // الحفاظ على صور الشيكات عند إعادة التعيين
+  lastBackupDate?: string;
+  nextBackupDate?: string;
+}
+
+export interface BackupItem {
+  id: string;
+  filename: string;
+  createdAt: string;
+  sizeBytes: number;
+  sizeFormatted: string;
+  type: 'scheduled' | 'manual';
+  tablesCount: number;
+  recordsCount: number;
+  hasChequeImages: boolean;
+  chequeImagesCount?: number;
+  notes?: string;
+  dataJson?: string;
 }
 
 export interface ChequePrintSettings {

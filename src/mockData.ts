@@ -9,6 +9,17 @@ export const INITIAL_SETTINGS: CompanySettings = {
   roundingStep: 0.050,
   receiptAmountType: 'cash',
   defaultVoucherBase: 1349,
+  backupConfig: {
+    enabled: true,
+    frequency: 'daily',
+    scheduledTime: '02:00',
+    retentionCount: 14,
+    autoIncludeUploads: true,
+    chequeImagesCustomPath: 'uploads/cheques',
+    preserveImagesOnReset: true,
+    lastBackupDate: '2026-09-24 02:00:00',
+    nextBackupDate: '2026-09-25 02:00:00',
+  },
 };
 
 export const INITIAL_BRANCHES: Branch[] = [
