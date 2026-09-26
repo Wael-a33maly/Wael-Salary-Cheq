@@ -565,5 +565,10 @@ VALUES
 (1, 1, 1.000, '5020-01', 'مصروف عمولات ومصاريف بنكية', 3, 1, 1, 1, 0)
 ON DUPLICATE KEY UPDATE `updated_at`=NOW();
 
+INSERT INTO `settings` (`id`, `company_name`, `overtime_multiplier`, `residency_alert_days`, `currency`, `rounding_step`)
+VALUES 
+(1, 'شركة الأعمال للتجارة والمقاولات', 1.25, 60, 'د.ك', 0.050)
+ON DUPLICATE KEY UPDATE `updated_at`=NOW();
+
 SET FOREIGN_KEY_CHECKS = 1;
 

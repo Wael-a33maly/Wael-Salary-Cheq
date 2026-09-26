@@ -7,7 +7,8 @@
 
 declare(strict_types=1);
 error_reporting(E_ALL);
-ini_set('display_errors', '0');
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
 
 $lockFile = __DIR__ . '/install.lock';
 $configDir = dirname(__DIR__) . '/config';
@@ -23,8 +24,8 @@ $successMessage = '';
 // فحص المتطلبات التقنية
 $requirements = [
     'php_version' => [
-        'name' => 'إصدار PHP 8.2 أو أعلى',
-        'status' => version_compare(PHP_VERSION, '8.2.0', '>='),
+        'name' => 'إصدار PHP 8.0 أو أعلى (موصى به 8.2)',
+        'status' => version_compare(PHP_VERSION, '8.0.0', '>='),
         'current' => PHP_VERSION,
     ],
     'pdo' => [
@@ -100,19 +101,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isLocked && $allRequirementsPasse
             // تنفيذ استعلامات إنشاء الجداول
             $pdo->exec($sqlContent);
 
-            // إدخال الإعدادات الافتراضية
+            // إدخال وتحديث الإعدادات الافتراضية للشركة بمرونة وتوافقية كاملة
+            $settingsCols = [];
+            try {
+                $colsStmt = $pdo->query("SHOW COLUMNS FROM settings");
+                while ($c = $colsStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $settingsCols[] = strtolower($c['Field']);
+                }
+            } catch (Throwable $ignore) {}
+
+            // تحديد أسماء الحقول بدقة حسب بنية الجدول المنشأ
+            $colOt = in_array('overtime_multiplier', $settingsCols, true) ? 'overtime_multiplier' : (in_array('overtime_rate', $settingsCols, true) ? 'overtime_rate' : 'overtime_multiplier');
+            $colRes = in_array('residency_alert_days', $settingsCols, true) ? 'residency_alert_days' : (in_array('residence_alert_days', $settingsCols, true) ? 'residence_alert_days' : 'residency_alert_days');
+
+            // إضافة الحقول في حال عدم وجودها لأي سبب
+            if (!in_array($colOt, $settingsCols, true)) {
+                try { $pdo->exec("ALTER TABLE settings ADD COLUMN `overtime_multiplier` DECIMAL(4,2) NOT NULL DEFAULT 1.25"); $colOt = 'overtime_multiplier'; } catch (Throwable $ignore) {}
+            }
+            if (!in_array($colRes, $settingsCols, true)) {
+                try { $pdo->exec("ALTER TABLE settings ADD COLUMN `residency_alert_days` INT UNSIGNED NOT NULL DEFAULT 60"); $colRes = 'residency_alert_days'; } catch (Throwable $ignore) {}
+            }
+
             $stmtSettings = $pdo->prepare("
-                INSERT INTO settings (id, company_name, overtime_rate, residence_alert_days, currency, rounding_step)
-                VALUES (1, :company_name, :overtime_rate, :residence_alert_days, 'د.ك', 0.050)
+                INSERT INTO settings (id, company_name, {$colOt}, {$colRes}, currency, rounding_step)
+                VALUES (1, :company_name, :ot_val, :res_val, 'د.ك', 0.050)
                 ON DUPLICATE KEY UPDATE 
                     company_name = VALUES(company_name),
-                    overtime_rate = VALUES(overtime_rate),
-                    residence_alert_days = VALUES(residence_alert_days)
+                    {$colOt} = VALUES({$colOt}),
+                    {$colRes} = VALUES({$colRes})
             ");
             $stmtSettings->execute([
                 ':company_name' => $companyName,
-                ':overtime_rate' => $overtimeRate,
-                ':residence_alert_days' => $residenceAlertDays,
+                ':ot_val'       => $overtimeRate,
+                ':res_val'      => $residenceAlertDays,
             ]);
 
             // تشفير كلمة مرور الأدمن عبر bcrypt

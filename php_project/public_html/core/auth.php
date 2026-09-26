@@ -13,17 +13,21 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_only_cookies', '1');
     ini_set('session.use_trans_sid', '0');
 
-    $isSecure = (isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) === 'on') 
-             || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $isSecure = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') 
+             || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+             || (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
 
-    session_set_cookie_params([
-        'lifetime' => 0, // تنتهي بإغلاق المتصفح
-        'path'     => '/',
-        'domain'   => '',
-        'secure'   => $isSecure,
-        'httponly' => true,
-        'samesite' => 'Strict',
-    ]);
+    if (PHP_VERSION_ID >= 70300) {
+        session_set_cookie_params([
+            'lifetime' => 0, // تنتهي بإغلاق المتصفح
+            'path'     => '/',
+            'secure'   => $isSecure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } else {
+        session_set_cookie_params(0, '/; samesite=Lax', '', $isSecure, true);
+    }
 
     session_start();
 }
@@ -47,12 +51,22 @@ function csrfField(): string {
 }
 
 /**
+ * فحص صحة رمز CSRF مع إرجاع boolean
+ */
+function verifyCsrfToken(?string $token = null): bool {
+    $token = $token ?? $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+    if (empty($token) || empty($_SESSION['csrf_token'])) {
+        return false;
+    }
+    return hash_equals($_SESSION['csrf_token'], (string)$token);
+}
+
+/**
  * التحقق الإلزامي من صحة رمز CSRF المرسل مع طلبات POST
  * تُستخدم في بداية كل معالجة POST
  */
 function verifyCsrf(): bool {
-    $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
-    if (empty($token) || empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], (string)$token)) {
+    if (!verifyCsrfToken()) {
         http_response_code(403);
         die('خطأ أمني: رمز الحماية من تزوير الطلبات (CSRF Token) غير صالح أو انتهت صلاحيته. يرجى تحديث الصفحة والمحاولة مجدداً.');
     }

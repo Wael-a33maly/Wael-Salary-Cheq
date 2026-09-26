@@ -31,101 +31,116 @@ $pdo = getDbConnection();
 $companySettings = getCompanySettings($pdo);
 $alertDaysLimit = (int)($companySettings['residency_alert_days'] ?? 60);
 
-// 1. إحصائيات الموظفين
-$empStats = $pdo->query("
-    SELECT 
-        COUNT(*) AS total,
-        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_count,
-        SUM(CASE WHEN status = 'on_leave' THEN 1 ELSE 0 END) AS leave_count,
-        SUM(CASE WHEN status = 'resigned' THEN 1 ELSE 0 END) AS resigned_count,
-        SUM(CASE WHEN status = 'active' THEN basic_salary ELSE 0 END) AS total_basic_active
-    FROM employees
-")->fetch(PDO::FETCH_ASSOC);
-
-// 2. إحصائيات الفروع
-$branchesCount = (int)$pdo->query("SELECT COUNT(*) FROM branches WHERE status = 'active'")->fetchColumn();
-
-// 3. آخر شهر رواتب محسوب
-$lastPayrollStmt = $pdo->query("
-    SELECT year, month, 
-           COUNT(*) AS emp_count,
-           SUM(net_salary) AS total_net,
-           SUM(bank_amount) AS total_bank,
-           SUM(final_cash) AS total_cash,
-           SUM(rounding_diff) AS total_rounding
-    FROM payslips
-    GROUP BY year, month
-    ORDER BY year DESC, month DESC
-    LIMIT 1
-");
-$lastPayroll = $lastPayrollStmt->fetch(PDO::FETCH_ASSOC);
-
-// 4. إجمالي وفر فروق التقريب التراكمي في النظام
-$totalCumulativeRounding = (float)$pdo->query("SELECT COALESCE(SUM(rounding_diff), 0) FROM payslips")->fetchColumn();
-
-// 5. الموظفون المستحقون لتنبيه الإقامة
-$residenceStmt = $pdo->prepare("
-    SELECT e.id, e.name, e.civil_id, e.residence_expiry_date, b.name AS branch_name, d.name AS dept_name
-    FROM employees e
-    JOIN branches b ON b.id = e.branch_id
-    JOIN departments d ON d.id = e.department_id
-    WHERE e.status = 'active' 
-      AND e.residence_expiry_date IS NOT NULL
-      AND e.residence_expiry_date <= DATE_ADD(CURDATE(), INTERVAL :days DAY)
-    ORDER BY e.residence_expiry_date ASC
-    LIMIT 10
-");
-$residenceStmt->execute([':days' => $alertDaysLimit]);
-$residenceAlerts = $residenceStmt->fetchAll(PDO::FETCH_ASSOC);
-
-// 6. بيانات الرسم البياني: تطور الرواتب لآخر 6 أشهر
-$historyPayrollStmt = $pdo->query("
-    SELECT year, month, 
-           SUM(basic_salary) AS total_basic,
-           SUM(net_salary) AS total_net,
-           SUM(bank_amount) AS total_bank,
-           SUM(final_cash) AS total_cash
-    FROM payslips
-    GROUP BY year, month
-    ORDER BY year ASC, month ASC
-    LIMIT 6
-");
-$payrollHistory = $historyPayrollStmt->fetchAll(PDO::FETCH_ASSOC);
-
+// تهيئة المتغيرات الافتراضية
+$empStats = ['total' => 0, 'active_count' => 0, 'leave_count' => 0, 'resigned_count' => 0, 'total_basic_active' => 0];
+$branchesCount = 0;
+$lastPayroll = null;
+$totalCumulativeRounding = 0.000;
+$residenceAlerts = [];
 $chartLabels = [];
 $chartNet = [];
 $chartBasic = [];
-foreach ($payrollHistory as $h) {
-    $chartLabels[] = $h['month'] . '/' . $h['year'];
-    $chartNet[] = (float)$h['total_net'];
-    $chartBasic[] = (float)$h['total_basic'];
-}
+$branchDistData = [];
+$recentAudits = [];
 
-// 7. بيانات الرسم البياني: توزيع الرواتب حسب الفرع لآخر كشف
-$branchDistStmt = $pdo->prepare("
-    SELECT b.name AS branch_name, SUM(p.net_salary) AS total_branch_net
-    FROM payslips p
-    JOIN employees e ON e.id = p.employee_id
-    JOIN branches b ON b.id = e.branch_id
-    WHERE p.month = :m AND p.year = :y
-    GROUP BY b.id, b.name
-    ORDER BY total_branch_net DESC
-");
-if ($lastPayroll) {
-    $branchDistStmt->execute([':m' => $lastPayroll['month'], ':y' => $lastPayroll['year']]);
-    $branchDistData = $branchDistStmt->fetchAll(PDO::FETCH_ASSOC);
-} else {
-    $branchDistData = [];
-}
+try {
+    // 1. إحصائيات الموظفين
+    $empQuery = $pdo->query("
+        SELECT 
+            COUNT(*) AS total,
+            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_count,
+            SUM(CASE WHEN status = 'on_leave' THEN 1 ELSE 0 END) AS leave_count,
+            SUM(CASE WHEN status = 'resigned' THEN 1 ELSE 0 END) AS resigned_count,
+            SUM(CASE WHEN status = 'active' THEN basic_salary ELSE 0 END) AS total_basic_active
+        FROM employees
+    ");
+    if ($empRow = $empQuery->fetch(PDO::FETCH_ASSOC)) {
+        $empStats = $empRow;
+    }
 
-// 8. آخر حركات سجل التدقيق
-$recentAudits = $pdo->query("
-    SELECT a.*, u.username, u.full_name 
-    FROM audit_log a 
-    LEFT JOIN users u ON a.user_id = u.id 
-    ORDER BY a.created_at DESC 
-    LIMIT 6
-")->fetchAll(PDO::FETCH_ASSOC);
+    // 2. إحصائيات الفروع
+    $branchesCount = (int)$pdo->query("SELECT COUNT(*) FROM branches WHERE status = 'active'")->fetchColumn();
+
+    // 3. آخر شهر رواتب محسوب
+    $lastPayrollStmt = $pdo->query("
+        SELECT year, month, 
+               COUNT(*) AS emp_count,
+               SUM(net_salary) AS total_net,
+               SUM(bank_amount) AS total_bank,
+               SUM(final_cash) AS total_cash,
+               SUM(rounding_diff) AS total_rounding
+        FROM payslips
+        GROUP BY year, month
+        ORDER BY year DESC, month DESC
+        LIMIT 1
+    ");
+    $lastPayroll = $lastPayrollStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+    // 4. إجمالي وفر فروق التقريب التراكمي في النظام
+    $totalCumulativeRounding = (float)$pdo->query("SELECT COALESCE(SUM(rounding_diff), 0) FROM payslips")->fetchColumn();
+
+    // 5. الموظفون المستحقون لتنبيه الإقامة
+    $residenceStmt = $pdo->prepare("
+        SELECT e.id, e.name, e.civil_id, e.residence_expiry_date, b.name AS branch_name, d.name AS dept_name
+        FROM employees e
+        JOIN branches b ON b.id = e.branch_id
+        JOIN departments d ON d.id = e.department_id
+        WHERE e.status = 'active' 
+          AND e.residence_expiry_date IS NOT NULL
+          AND e.residence_expiry_date <= DATE_ADD(CURDATE(), INTERVAL :days DAY)
+        ORDER BY e.residence_expiry_date ASC
+        LIMIT 10
+    ");
+    $residenceStmt->execute([':days' => $alertDaysLimit]);
+    $residenceAlerts = $residenceStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // 6. بيانات الرسم البياني: تطور الرواتب لآخر 6 أشهر
+    $historyPayrollStmt = $pdo->query("
+        SELECT year, month, 
+               SUM(basic_salary) AS total_basic,
+               SUM(net_salary) AS total_net,
+               SUM(bank_amount) AS total_bank,
+               SUM(final_cash) AS total_cash
+        FROM payslips
+        GROUP BY year, month
+        ORDER BY year ASC, month ASC
+        LIMIT 6
+    ");
+    $payrollHistory = $historyPayrollStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($payrollHistory as $h) {
+        $chartLabels[] = $h['month'] . '/' . $h['year'];
+        $chartNet[] = (float)$h['total_net'];
+        $chartBasic[] = (float)$h['total_basic'];
+    }
+
+    // 7. بيانات الرسم البياني: توزيع الرواتب حسب الفرع لآخر كشف
+    if ($lastPayroll) {
+        $branchDistStmt = $pdo->prepare("
+            SELECT b.name AS branch_name, SUM(p.net_salary) AS total_branch_net
+            FROM payslips p
+            JOIN employees e ON e.id = p.employee_id
+            JOIN branches b ON b.id = e.branch_id
+            WHERE p.month = :m AND p.year = :y
+            GROUP BY b.id, b.name
+            ORDER BY total_branch_net DESC
+        ");
+        $branchDistStmt->execute([':m' => $lastPayroll['month'], ':y' => $lastPayroll['year']]);
+        $branchDistData = $branchDistStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // 8. آخر حركات سجل التدقيق
+    $recentAudits = $pdo->query("
+        SELECT a.*, u.username, u.full_name 
+        FROM audit_log a 
+        LEFT JOIN users u ON a.user_id = u.id 
+        ORDER BY a.created_at DESC 
+        LIMIT 6
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+} catch (Throwable $e) {
+    error_log('Dashboard data load warning: ' . $e->getMessage());
+}
 
 require_once __DIR__ . '/core/header.php';
 ?>

@@ -30,15 +30,16 @@ $error = '';
 $redirect = $_GET['redirect'] ?? 'index.php';
 
 // جلب إعدادات الشركة للشعار والاسم
-$pdo = getDbConnection();
 $companyName = 'نظام إدارة الرواتب';
 $companyLogo = null;
+$pdo = null;
 
 try {
-    $stmtSettings = $pdo->query("SELECT company_name, company_logo FROM settings WHERE id = 1 LIMIT 1");
+    $pdo = getDbConnection();
+    $stmtSettings = $pdo->query("SELECT company_name, logo_path FROM settings WHERE id = 1 LIMIT 1");
     if ($row = $stmtSettings->fetch()) {
-        $companyName = $row['company_name'] ?: $companyName;
-        $companyLogo = $row['company_logo'];
+        $companyName = !empty($row['company_name']) ? $row['company_name'] : $companyName;
+        $companyLogo = $row['logo_path'] ?? null;
     }
 } catch (Throwable $e) {
     // تجاوز في حال لم توجد بيانات بعد
@@ -82,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 loginUser($user);
 
                 // التحقق من وجهة التحويل لمنع هجمات Open Redirect
-                $target = (filter_var($redirect, FILTER_VALIDATE_URL) === false && !str_starts_with($redirect, '//')) 
+                $target = (filter_var($redirect, FILTER_VALIDATE_URL) === false && substr($redirect, 0, 2) !== '//') 
                     ? $redirect 
                     : 'index.php';
 

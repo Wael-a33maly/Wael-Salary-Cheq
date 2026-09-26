@@ -42,7 +42,10 @@ function roundCashDown(float $rawCash, float $step = 0.050): float {
  * حساب عدد الأيام الفعلية في شهر وسنة محددين
  */
 function getActualDaysInMonth(int $month, int $year): int {
-    return cal_days_in_month(CAL_GREGORIAN, $month, $year);
+    if (function_exists('cal_days_in_month')) {
+        return cal_days_in_month(CAL_GREGORIAN, $month, $year);
+    }
+    return (int) date('t', mktime(0, 0, 0, $month, 1, $year));
 }
 
 /**
