@@ -625,6 +625,7 @@ export function SettingsView({
           </button>
 
           <button
+            type="button"
             onClick={handleDownload}
             disabled={downloading}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md transition disabled:opacity-50"

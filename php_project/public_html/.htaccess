@@ -3,6 +3,9 @@
 
 AddDefaultCharset UTF-8
 
+# أولوية تحميل الواجهة التفاعلية الشاملة (تتضمن الشيكات والمطابقة والرواتب)
+DirectoryIndex index.html index.php dashboard.php
+
 # منع استعراض محتويات المجلدات بأمان تام
 <IfModule mod_autoindex.c>
     IndexIgnore *

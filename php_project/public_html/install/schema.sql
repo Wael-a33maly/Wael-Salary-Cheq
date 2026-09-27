@@ -533,13 +533,13 @@ CREATE TABLE IF NOT EXISTS `monthly_payrolls` (
 -- --------------------------------------------------------
 INSERT INTO `bank_accounts` (`id`, `account_name`, `bank_name`, `bank_code`, `account_number`, `iban`, `branch_name`, `currency`, `current_balance`, `is_default`, `status`, `cheque_template`, `cheque_width_cm`, `cheque_height_cm`, `cheque_image_url`, `active_template_id`)
 VALUES 
-('acc-cbk-main', 'حساب العمليات الرئيسي - التجاري', 'البنك التجاري الكويتي (CBK)', 'CBK', '1020491823', 'KW18CBKU000000001020491823', 'الفرع الرئيسي - مبارك الكبير', 'د.ك', 85400.000, 1, 'active', 'CBK', 18.00, 9.00, '/cbk_cheque_bg.jpg', 'tpl-cbk-std')
+('acc-cbk-main', 'حساب العمليات الرئيسي - التجاري', 'البنك التجاري الكويتي (CBK)', 'CBK', '1020491823', 'KW18CBKU000000001020491823', 'الفرع الرئيسي - مبارك الكبير', 'د.ك', 85400.000, 1, 'active', 'CBK', 18.00, 9.00, '/uploads/cheques/cbk_cheque_bg.jpg', 'tpl-cbk-std')
 ON DUPLICATE KEY UPDATE `account_name`=VALUES(`account_name`);
 
 INSERT INTO `cheque_templates` (`id`, `bank_account_id`, `name`, `width_cm`, `height_cm`, `cheque_image_url`, `is_default`, `notes`)
 VALUES 
-('tpl-cbk-std', 'acc-cbk-main', 'شيك تجاري قياسي (18×9 سم)', 18.00, 9.00, '/cbk_cheque_bg.jpg', 1, 'المقاس المعتمد للبنك التجاري الكويتي'),
-('tpl-cbk-corp', 'acc-cbk-main', 'شيك شركات عريض (21×8.5 سم)', 21.00, 8.50, '/cbk_cheque_bg.jpg', 0, 'مقاس شيكات الشركات الخاصة')
+('tpl-cbk-std', 'acc-cbk-main', 'شيك تجاري قياسي (18×9 سم)', 18.00, 9.00, '/uploads/cheques/cbk_cheque_bg.jpg', 1, 'المقاس المعتمد للبنك التجاري الكويتي'),
+('tpl-cbk-corp', 'acc-cbk-main', 'شيك شركات عريض (21×8.5 سم)', 21.00, 8.50, '/uploads/cheques/cbk_cheque_bg.jpg', 0, 'مقاس شيكات الشركات الخاصة')
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
 
 INSERT INTO `cheque_books` (`id`, `bank_account_id`, `book_code`, `book_name`, `serial_from`, `serial_to`, `total_leaves`, `current_serial`, `received_date`, `status`, `notes`)

@@ -133,6 +133,7 @@ export function HostingerGuideModal({ isOpen, onClose }: HostingerGuideModalProp
             </div>
 
             <button
+              type="button"
               onClick={handleDownload}
               disabled={downloading}
               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-md transition active:scale-95 disabled:opacity-50 whitespace-nowrap self-start sm:self-auto"
