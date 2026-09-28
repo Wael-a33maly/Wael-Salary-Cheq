@@ -339,6 +339,14 @@ require_once __DIR__ . '/core/header.php';
                     <span class="fw-bold">💰 احتساب كشف رواتب جديد</span>
                     <span class="fs-5">&larr;</span>
                 </a>
+                <a href="app.html" class="btn btn-outline-warning text-dark d-flex align-items-center justify-content-between p-2 bg-warning-subtle border-warning">
+                    <span class="fw-bold">💳 تحرير وطباعة الشيكات البنكية (CBK)</span>
+                    <span class="badge bg-warning text-dark font-sans fw-bold">9×18 سم &larr;</span>
+                </a>
+                <a href="app.html" class="btn btn-outline-success d-flex align-items-center justify-content-between p-2 bg-success-subtle border-success">
+                    <span class="fw-bold">⚖️ مطابقة الحسابات البنكية (Reconciliation)</span>
+                    <span class="badge bg-success text-white font-sans fw-bold">تسوية آلية &larr;</span>
+                </a>
                 <a href="core/employees.php" class="btn btn-outline-dark d-flex align-items-center justify-content-between p-2">
                     <span class="fw-bold">👤 إدارة الموظفين وإضافة موظف</span>
                     <span class="fs-5">&larr;</span>

@@ -66,7 +66,7 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
     chequeTemplate: 'CBK',
     chequeWidthCm: 18.0,
     chequeHeightCm: 9.0,
-    chequeImageUrl: '/src/assets/images/cbk_cheque_bg_1789993769401.jpg',
+    chequeImageUrl: '/cbk_cheque_bg.jpg',
     chequeImageName: 'cbk_official_stamp.jpg',
     activeTemplateId: 'tpl-cbk-std',
     chequeTemplates: [
@@ -75,7 +75,7 @@ export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
         name: 'شيك تجاري قياسي CBK (18.0 × 9.0 سم)',
         widthCm: 18.0,
         heightCm: 9.0,
-        chequeImageUrl: '/src/assets/images/cbk_cheque_bg_1789993769401.jpg',
+        chequeImageUrl: '/cbk_cheque_bg.jpg',
         chequeImageName: 'cbk_official_stamp.jpg',
         isDefault: true,
         notes: 'الستامب المعتمد للشيكات التشغيلية اليومية',

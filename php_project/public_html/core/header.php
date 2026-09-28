@@ -23,6 +23,10 @@ $expiringCount = getExpiringResidenciesAlertCount($pdo, $alertDays);
 
 $pageTitle = $pageTitle ?? $companySettings['company_name'];
 $activeNav = $activeNav ?? '';
+
+// حساب المسار النسبي للجذر حسب مكان استدعاء header.php
+$isRoot = (basename(dirname($_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(dirname(__DIR__)));
+$base = $isRoot ? '' : '../';
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -96,9 +100,9 @@ $activeNav = $activeNav ?? '';
 <nav class="navbar navbar-expand-lg navbar-dark navbar-main py-2.5 no-print">
     <div class="container-fluid px-3 px-lg-4">
         <!-- الشعار واسم الشركة -->
-        <a class="navbar-brand d-flex align-items-center gap-2" href="../index.php">
-            <?php if (!empty($companySettings['logo_path']) && file_exists(__DIR__ . '/../' . $companySettings['logo_path'])): ?>
-                <img src="../<?= e($companySettings['logo_path']) ?>" alt="Logo" height="36" class="rounded bg-white p-1">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="<?= $base ?>index.php">
+            <?php if (!empty($companySettings['logo_path']) && file_exists(dirname(__DIR__) . '/' . $companySettings['logo_path'])): ?>
+                <img src="<?= $base . e($companySettings['logo_path']) ?>" alt="Logo" height="36" class="rounded bg-white p-1">
             <?php else: ?>
                 <span class="fs-4 bg-primary text-white rounded p-1 d-inline-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">💼</span>
             <?php endif; ?>
@@ -115,28 +119,33 @@ $activeNav = $activeNav ?? '';
         <div class="collapse navbar-collapse" id="mainNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-1 mt-2 mt-lg-0">
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'dashboard' ? 'active' : '' ?>" href="../index.php">لوحة التحكم</a>
+                    <a class="nav-link <?= $activeNav === 'dashboard' ? 'active' : '' ?>" href="<?= $base ?>index.php">لوحة التحكم</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'payroll' ? 'active' : '' ?>" href="../modules/payroll/index.php">وحدة الرواتب</a>
+                    <a class="nav-link <?= $activeNav === 'payroll' ? 'active' : '' ?>" href="<?= $base ?>modules/payroll/index.php">وحدة الرواتب</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'employees' ? 'active' : '' ?>" href="../core/employees.php">الموظفون</a>
+                    <a class="nav-link <?= $activeNav === 'employees' ? 'active' : '' ?>" href="<?= $base ?>core/employees.php">الموظفون</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'branches' ? 'active' : '' ?>" href="../core/branches.php">الفروع</a>
+                    <a class="nav-link <?= $activeNav === 'branches' ? 'active' : '' ?>" href="<?= $base ?>core/branches.php">الفروع</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'departments' ? 'active' : '' ?>" href="../core/departments.php">الأقسام</a>
+                    <a class="nav-link <?= $activeNav === 'departments' ? 'active' : '' ?>" href="<?= $base ?>core/departments.php">الأقسام</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'reports' ? 'active' : '' ?>" href="../reports/index.php">التقارير (8)</a>
+                    <a class="nav-link <?= $activeNav === 'reports' ? 'active' : '' ?>" href="<?= $base ?>reports/index.php">التقارير (8)</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'settings' ? 'active' : '' ?>" href="../core/settings.php">الإعدادات</a>
+                    <a class="nav-link <?= $activeNav === 'settings' ? 'active' : '' ?>" href="<?= $base ?>core/settings.php">الإعدادات</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= $activeNav === 'audit' ? 'active' : '' ?>" href="../core/audit_view.php">سجل التعديلات</a>
+                    <a class="nav-link <?= $activeNav === 'audit' ? 'active' : '' ?>" href="<?= $base ?>core/audit_view.php">سجل التعديلات</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $activeNav === 'cheques' ? 'active' : '' ?>" href="<?= $base ?>app.html" title="طباعة الشيكات ومطابقة الحسابات البنكية">
+                        <span>💳 الشيكات والمطابقة</span>
+                    </a>
                 </li>
             </ul>
 
@@ -144,7 +153,7 @@ $activeNav = $activeNav ?? '';
             <div class="d-flex align-items-center gap-2 mt-2 mt-lg-0">
                 <!-- شارة الإقامات قريبة الانتهاء -->
                 <?php if ($expiringCount > 0): ?>
-                    <a href="../reports/residency.php?filter=alert" class="btn btn-warning btn-sm d-flex align-items-center gap-1.5 fw-bold px-2.5 py-1 text-dark" title="تنبيه: إقامات تنتهي قريباً">
+                    <a href="<?= $base ?>reports/residency.php?filter=alert" class="btn btn-warning btn-sm d-flex align-items-center gap-1.5 fw-bold px-2.5 py-1 text-dark" title="تنبيه: إقامات تنتهي قريباً">
                         <span class="residency-badge-pulse">⚠️</span>
                         <span>إقامات تنتهي قريباً:</span>
                         <span class="badge bg-danger text-white rounded-pill"><?= $expiringCount ?></span>
@@ -164,10 +173,11 @@ $activeNav = $activeNav ?? '';
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                         <li><span class="dropdown-item-text small text-muted">الدور: <?= e($currentUser['role'] ?? 'super_admin') ?></span></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item small" href="../change_password.php">🔑 تغيير كلمة المرور</a></li>
-                        <li><a class="dropdown-item small" href="../core/settings.php">⚙️ إعدادات النظام</a></li>
+                        <li><a class="dropdown-item small" href="<?= $base ?>change_password.php">🔑 تغيير كلمة المرور</a></li>
+                        <li><a class="dropdown-item small" href="<?= $base ?>core/users.php">👥 إدارة المستخدمين</a></li>
+                        <li><a class="dropdown-item small" href="<?= $base ?>core/settings.php">⚙️ إعدادات النظام</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item small text-danger" href="../logout.php">🚪 تسجيل الخروج</a></li>
+                        <li><a class="dropdown-item small text-danger" href="<?= $base ?>logout.php">🚪 تسجيل الخروج</a></li>
                     </ul>
                 </div>
             </div>
@@ -179,7 +189,7 @@ $activeNav = $activeNav ?? '';
 <?php if (!empty($currentUser['is_default_password'])): ?>
     <div class="alert alert-danger mb-0 rounded-0 text-center py-2 px-3 fw-bold small d-flex align-items-center justify-content-center gap-2 no-print border-bottom border-danger-subtle">
         <span>⚠️ تنبيه أمني عاجل: أنت تستخدم كلمة المرور الافتراضية لحساب المدير العام!</span>
-        <a href="../change_password.php" class="btn btn-sm btn-danger px-3 py-0.5 fw-bold">تغيير كلمة المرور الآن</a>
+        <a href="<?= $base ?>change_password.php" class="btn btn-sm btn-danger px-3 py-0.5 fw-bold">تغيير كلمة المرور الآن</a>
     </div>
 <?php endif; ?>
 
