@@ -312,8 +312,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isLocked && $allRequirementsPasse
                 </div>
             </div>
             <div class="text-center py-3">
-                <p class="text-muted">يمكنك التوجه مباشرة لصفحة تسجيل الدخول:</p>
-                <a href="../login.php" class="btn btn-primary btn-lg px-4 fw-bold">الانتقال إلى تسجيل الدخول</a>
+                <p class="text-muted">تم الانتهاء من إعداد قاعدة البيانات بنجاح! يمكنك الدخول مباشرة للنظام:</p>
+                <a href="../index.html" class="btn btn-primary btn-lg px-4 fw-bold">الانتقال إلى النظام (الواجهة الرئيسية) &larr;</a>
             </div>
         <?php else: ?>
 

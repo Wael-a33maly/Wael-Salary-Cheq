@@ -1,10 +1,8 @@
-# حماية نظام الرواتب على استضافة Hostinger المشتركة (LiteSpeed / Apache)
-# متوافق مع كافة إصدارات السيرفر لمنع أي خطأ 500
-
+# حماية نظام الرواتب والشيكات والمطابقة على استضافة Hostinger (LiteSpeed / Apache)
 AddDefaultCharset UTF-8
 
-# أولوية تحميل الواجهة التفاعلية الشاملة (تتضمن الشيكات والمطابقة والرواتب)
-DirectoryIndex index.html index.php dashboard.php
+# أولوية تحميل الواجهة التفاعلية الشاملة (تطبيق المعاينة الكامل)
+DirectoryIndex index.html index.php
 
 # منع استعراض محتويات المجلدات بأمان تام
 <IfModule mod_autoindex.c>
@@ -22,4 +20,18 @@ DirectoryIndex index.html index.php dashboard.php
     </IfModule>
 </FilesMatch>
 
-
+# دعم الـ Single Page Application (SPA) وتوجيه كافة الروابط للتطبيق الحديث
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    
+    # استثناء طلبات API والتنصيب والملفات والمجلدات الموجودة فعلياً
+    RewriteCond %{REQUEST_URI} ^/api/ [NC,OR]
+    RewriteCond %{REQUEST_URI} ^/install/ [NC,OR]
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+    
+    # توجيه أي مسار آخر إلى الواجهة التفاعلية الرئيسية
+    RewriteRule ^ index.html [L]
+</IfModule>
