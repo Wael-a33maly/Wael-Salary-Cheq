@@ -78,7 +78,14 @@ export function BranchesView({
 
       {/* Branches Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {branches.map((b) => {
+        {branches.length === 0 ? (
+          <div className="col-span-full p-12 text-center bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400 space-y-2">
+            <Building2 className="w-8 h-8 mx-auto text-slate-300" />
+            <p className="font-bold text-slate-700">لا توجد فروع مسجلة حالياً</p>
+            <p className="text-xs text-slate-400">اضغط على زر "إضافة فرع جديد" لإضافة أول فرع للشركة.</p>
+          </div>
+        ) : (
+          branches.map((b) => {
           const isSelected = b.id === selectedBranchId;
           const count = employees.filter((e) => e.branchId === b.id).length;
           const sum = employees
@@ -118,8 +125,9 @@ export function BranchesView({
               </div>
             </div>
           );
-        })}
-      </div>
+        })
+      )}
+    </div>
 
       {/* Selected Branch Details & Departments */}
       {selectedBranch && (

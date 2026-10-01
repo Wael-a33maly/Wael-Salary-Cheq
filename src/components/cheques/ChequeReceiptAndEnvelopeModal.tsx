@@ -42,7 +42,107 @@ export function ChequeReceiptAndEnvelopeModal({
   const todayDate = new Date().toISOString().split('T')[0];
 
   const handlePrint = () => {
-    window.print();
+    try {
+      let iframe = document.getElementById('receipt-print-iframe') as HTMLIFrameElement;
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'receipt-print-iframe';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        iframe.style.zIndex = '-9999';
+        document.body.appendChild(iframe);
+      }
+
+      const doc = iframe.contentWindow?.document;
+      const targetEl = document.getElementById('cheque-document-print-target');
+      if (!doc || !targetEl) {
+        window.print();
+        return;
+      }
+
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html dir="rtl">
+        <head>
+          <meta charset="utf-8" />
+          <title>${activeMode === 'receipt' ? 'سند صرف شيك' : 'مظروف تسليم شيك'} #${cheque.chequeNumberStr}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 10mm;
+            }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+              direction: rtl;
+              margin: 0;
+              padding: 10mm;
+              background: #fff;
+              color: #0f172a;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .border-b-2 { border-bottom: 2px solid #0f172a; }
+            .border-b { border-bottom: 1px solid #cbd5e1; }
+            .border-t-2 { border-top: 2px solid #0f172a; }
+            .border-t { border-top: 1px solid #cbd5e1; }
+            .border { border: 1px solid #cbd5e1; }
+            .rounded-xl { border-radius: 12px; }
+            .rounded { border-radius: 4px; }
+            .p-8 { padding: 24px; }
+            .p-4 { padding: 16px; }
+            .py-2 { padding-top: 8px; padding-bottom: 8px; }
+            .px-4 { padding-left: 16px; padding-right: 16px; }
+            .flex { display: flex; }
+            .justify-between { justify-content: space-between; }
+            .items-center { align-items: center; }
+            .items-start { align-items: flex-start; }
+            .items-end { align-items: flex-end; }
+            .grid { display: grid; }
+            .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .gap-4 { gap: 16px; }
+            .space-y-6 > * + * { margin-top: 24px; }
+            .space-y-4 > * + * { margin-top: 16px; }
+            .space-y-2 > * + * { margin-top: 8px; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .text-left { text-align: left; }
+            .font-mono { font-family: monospace; }
+            .font-bold { font-weight: 700; }
+            .font-black { font-weight: 900; }
+            .text-xl { font-size: 20px; }
+            .text-lg { font-size: 18px; }
+            .text-sm { font-size: 14px; }
+            .text-xs { font-size: 12px; }
+            .text-slate-900 { color: #0f172a; }
+            .text-slate-700 { color: #334155; }
+            .text-slate-500 { color: #64748b; }
+            .bg-slate-900 { background-color: #0f172a; color: #fff; }
+            .bg-slate-100 { background-color: #f1f5f9; }
+            .bg-amber-50 { background-color: #fffbeb; }
+            .border-amber-200 { border-color: #fde68a; }
+            .text-amber-900 { color: #78350f; }
+          </style>
+        </head>
+        <body>
+          ${targetEl.outerHTML}
+        </body>
+        </html>
+      `);
+      doc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      }, 250);
+    } catch {
+      window.print();
+    }
   };
 
   return (

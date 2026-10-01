@@ -28,7 +28,8 @@ import {
   ArrowUpDown,
   Layers,
   ChevronDown,
-  Database
+  Database,
+  Plus
 } from 'lucide-react';
 import {
   BankStatementTransaction,
@@ -109,34 +110,73 @@ export function BankReconciliationView({
   // 3. Sessions
   const [sessions, setSessions] = useState<BankReconciliationSession[]>(() => {
     const saved = localStorage.getItem('app_rec_sessions');
-    return saved ? JSON.parse(saved) : INITIAL_RECONCILIATION_SESSIONS;
+    if (saved !== null) {
+      try {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) return arr;
+      } catch {}
+    }
+    return [];
   });
 
-  const [activeSessionId, setActiveSessionId] = useState<string>(
-    sessions[1]?.id || sessions[0]?.id || 'rec-session-2026-09'
-  );
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => {
+    const saved = localStorage.getItem('app_rec_sessions');
+    if (saved) {
+      try {
+        const arr = JSON.parse(saved);
+        if (arr && arr.length > 0) return arr[0].id;
+      } catch {}
+    }
+    return '';
+  });
+
+  const fallbackSession: BankReconciliationSession = useMemo(() => ({
+    id: activeSessionId || 'rec-session-fresh',
+    bankAccountId: 'acc-standalone',
+    bankAccountName: standaloneBankName || 'البنك التجاري الكويتي (CBK)',
+    bankAccountNumber: standaloneAccountNumber || '0101-998234-01',
+    periodStart: new Date().toISOString().substring(0, 7) + '-01',
+    periodEnd: new Date().toISOString().substring(0, 10),
+    currency: 'KWD',
+    openingBalanceBank: 0,
+    closingBalanceBank: 0,
+    openingBalanceAccounting: 0,
+    closingBalanceAccounting: 0,
+    status: 'draft',
+    isMonthClosed: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }), [activeSessionId, standaloneBankName, standaloneAccountNumber]);
 
   const activeSession = useMemo(() => {
-    return sessions.find((s) => s.id === activeSessionId) || sessions[0];
-  }, [sessions, activeSessionId]);
+    return sessions.find((s) => s.id === activeSessionId) || sessions[0] || fallbackSession;
+  }, [sessions, activeSessionId, fallbackSession]);
 
   // Working Period
   const [periodStart, setPeriodStart] = useState<string>(activeSession?.periodStart || '2026-09-01');
   const [periodEnd, setPeriodEnd] = useState<string>(activeSession?.periodEnd || '2026-09-30');
 
   // Input Opening / Closing Bank balances
-  const [bankOpeningBal, setBankOpeningBal] = useState<number>(activeSession?.openingBalanceBank || 48500);
-  const [bankClosingBal, setBankClosingBal] = useState<number>(activeSession?.closingBalanceBank || 53120.450);
+  const [bankOpeningBal, setBankOpeningBal] = useState<number>(activeSession?.openingBalanceBank || 0);
+  const [bankClosingBal, setBankClosingBal] = useState<number>(activeSession?.closingBalanceBank || 0);
 
   // 4. Working Transactions State (Bank statement and Application Ledger)
   const [bankTransactions, setBankTransactions] = useState<BankStatementTransaction[]>(() => {
+    if (!activeSessionId) return [];
     const saved = localStorage.getItem(`app_rec_bank_tx_${activeSessionId}`);
-    return saved ? JSON.parse(saved) : SAMPLE_BANK_STATEMENT_TRANSACTIONS;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return [];
   });
 
   const [accountingTransactions, setAccountingTransactions] = useState<AccountingTransaction[]>(() => {
+    if (!activeSessionId) return [];
     const saved = localStorage.getItem(`app_rec_acc_tx_${activeSessionId}`);
-    return saved ? JSON.parse(saved) : INITIAL_ACCOUNTING_TRANSACTIONS;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return [];
   });
 
   const [differences, setDifferences] = useState<ReconciliationDifference[]>(() => {
@@ -158,15 +198,116 @@ export function BankReconciliationView({
   // UI Flow Stages (1 through 7)
   const [currentStage, setCurrentStage] = useState<number>(1);
 
-  // Modals state
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importTarget, setImportTarget] = useState<'bank' | 'app'>('bank');
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
-  const [activeTxForJournal, setActiveTxForJournal] = useState<BankStatementTransaction | null>(null);
-  const [activeDiffForJournal, setActiveDiffForJournal] = useState<ReconciliationDifference | null>(null);
+  // الاستماع لحدث تصفير وإعادة تعيين البيانات الشاملة
+  useEffect(() => {
+    const handleResetEvent = (e: any) => {
+      const keys = e.detail?.selectedKeys || [];
+      const isAll = e.detail?.isAll || false;
+      if (isAll || keys.includes('reconciliation')) {
+        setSessions([]);
+        setBankTransactions([]);
+        setAccountingTransactions([]);
+        setDifferences([]);
+        setJournalEntries([]);
+        setCurrentStage(1);
+        setActiveSessionId('');
+        setBankOpeningBal(0);
+        setBankClosingBal(0);
+        localStorage.setItem('app_rec_sessions', '[]');
+      }
+    };
+    window.addEventListener('app_data_reset', handleResetEvent);
+    return () => window.removeEventListener('app_data_reset', handleResetEvent);
+  }, []);
 
-  // Search & Filter in differences tab
+  // دالة بدء دورة مطابقة جديدة
+  const handleCreateNewSession = () => {
+    const today = new Date();
+    const ym = today.toISOString().substring(0, 7);
+    const newId = `rec-session-${ym}-${Date.now().toString().slice(-4)}`;
+    const newSession: BankReconciliationSession = {
+      id: newId,
+      bankAccountId: 'acc-standalone',
+      bankAccountName: standaloneBankName || 'البنك التجاري الكويتي (CBK)',
+      bankAccountNumber: standaloneAccountNumber || '0101-998234-01',
+      periodStart: `${ym}-01`,
+      periodEnd: today.toISOString().substring(0, 10),
+      currency: 'KWD',
+      openingBalanceBank: 0,
+      closingBalanceBank: 0,
+      openingBalanceAccounting: 0,
+      closingBalanceAccounting: 0,
+      status: 'draft',
+      isMonthClosed: false,
+      createdAt: today.toISOString(),
+      updatedAt: today.toISOString(),
+    };
+    const updated = [newSession, ...sessions];
+    setSessions(updated);
+    setActiveSessionId(newId);
+    setBankTransactions([]);
+    setAccountingTransactions([]);
+    setDifferences([]);
+    setJournalEntries([]);
+    setCurrentStage(1);
+    localStorage.setItem('app_rec_sessions', JSON.stringify(updated));
+  };
+
+  // دالة تحميل بيانات نموذجية تجريبية للتوضيح
+  const handleLoadDemoData = () => {
+    const demoSession = INITIAL_RECONCILIATION_SESSIONS[0];
+    setSessions(INITIAL_RECONCILIATION_SESSIONS);
+    setActiveSessionId(demoSession.id);
+    setBankTransactions(SAMPLE_BANK_STATEMENT_TRANSACTIONS);
+    setAccountingTransactions(INITIAL_ACCOUNTING_TRANSACTIONS);
+    setDifferences([]);
+    setJournalEntries([]);
+    setCurrentStage(1);
+    localStorage.setItem('app_rec_sessions', JSON.stringify(INITIAL_RECONCILIATION_SESSIONS));
+    localStorage.setItem(`app_rec_bank_tx_${demoSession.id}`, JSON.stringify(SAMPLE_BANK_STATEMENT_TRANSACTIONS));
+    localStorage.setItem(`app_rec_acc_tx_${demoSession.id}`, JSON.stringify(INITIAL_ACCOUNTING_TRANSACTIONS));
+
+    // حفظ تلقائي في قاعدة بيانات MySQL
+    dbService.saveReconciliationSessionToDb(
+      demoSession,
+      SAMPLE_BANK_STATEMENT_TRANSACTIONS,
+      INITIAL_ACCOUNTING_TRANSACTIONS,
+      [],
+      []
+    ).catch((e) => console.warn('Could not save demo session to DB:', e));
+  };
+
+  // Update balances when active session changes
+  useEffect(() => {
+    if (activeSession) {
+      setPeriodStart(activeSession.periodStart || '2026-09-01');
+      setPeriodEnd(activeSession.periodEnd || '2026-09-30');
+      setBankOpeningBal(activeSession.openingBalanceBank || 0);
+      setBankClosingBal(activeSession.closingBalanceBank || 0);
+    }
+  }, [activeSession]);
+
+  // Load session specific transactions when activeSessionId changes
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const bTx = localStorage.getItem(`app_rec_bank_tx_${activeSessionId}`);
+    if (bTx) {
+      try { setBankTransactions(JSON.parse(bTx)); } catch {}
+    }
+    const aTx = localStorage.getItem(`app_rec_acc_tx_${activeSessionId}`);
+    if (aTx) {
+      try { setAccountingTransactions(JSON.parse(aTx)); } catch {}
+    }
+    const diffs = localStorage.getItem(`app_rec_diffs_${activeSessionId}`);
+    if (diffs) {
+      try { setDifferences(JSON.parse(diffs)); } catch {}
+    }
+    const jvs = localStorage.getItem(`app_rec_jvs_${activeSessionId}`);
+    if (jvs) {
+      try { setJournalEntries(JSON.parse(jvs)); } catch {}
+    }
+  }, [activeSessionId]);
+
   const [diffFilterStatus, setDiffFilterStatus] = useState<string>('all');
   const [diffSearchQuery, setDiffSearchQuery] = useState<string>('');
   const [mainViewSubTab, setMainViewSubTab] = useState<'all' | 'differences' | 'matched' | 'import_center' | 'statement' | 'report'>('all');
@@ -186,22 +327,27 @@ export function BankReconciliationView({
           if (data.reconciliationSettings) {
             setSettings(data.reconciliationSettings);
           }
-          if (data.reconciliationSessions && data.reconciliationSessions.length > 0) {
+          if (Array.isArray(data.reconciliationSessions) && data.reconciliationSessions.length > 0) {
             setSessions(data.reconciliationSessions);
+            if (!activeSessionId) {
+              setActiveSessionId(data.reconciliationSessions[0].id);
+            }
           }
         }
 
         // جلب حركات الجلسة المحددة من MySQL
-        const details = await dbService.fetchSessionDetailsFromDb(activeSessionId);
-        if (details) {
-          if (details.bankTransactions && details.bankTransactions.length > 0) {
-            setBankTransactions(details.bankTransactions);
-          }
-          if (details.ledgerTransactions && details.ledgerTransactions.length > 0) {
-            setAccountingTransactions(details.ledgerTransactions);
-          }
-          if (details.differences && details.differences.length > 0) {
-            setDifferences(details.differences);
+        if (activeSessionId) {
+          const details = await dbService.fetchSessionDetailsFromDb(activeSessionId);
+          if (details) {
+            if (Array.isArray(details.bankTransactions)) {
+              setBankTransactions(details.bankTransactions);
+            }
+            if (Array.isArray(details.ledgerTransactions)) {
+              setAccountingTransactions(details.ledgerTransactions);
+            }
+            if (Array.isArray(details.differences)) {
+              setDifferences(details.differences);
+            }
           }
         }
         setDbSyncMessage('مربوط بقاعدة بيانات MySQL المركزية على الدومين (مزامنة فورية)');
@@ -213,24 +359,30 @@ export function BankReconciliationView({
     }
   }, [activeSessionId]);
 
-  useEffect(() => {
-    syncWithDatabase();
-  }, [syncWithDatabase]);
+  // Modals state
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importTarget, setImportTarget] = useState<'bank' | 'app'>('bank');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
+  const [activeTxForJournal, setActiveTxForJournal] = useState<BankStatementTransaction | null>(null);
+  const [activeDiffForJournal, setActiveDiffForJournal] = useState<ReconciliationDifference | null>(null);
 
   // Save to localStorage when updated & push to MySQL
   const saveStateToStorage = () => {
     localStorage.setItem('app_rec_standalone_bank_name', standaloneBankName);
     localStorage.setItem('app_rec_standalone_acc_num', standaloneAccountNumber);
     localStorage.setItem('app_rec_sessions', JSON.stringify(sessions));
-    localStorage.setItem(`app_rec_bank_tx_${activeSessionId}`, JSON.stringify(bankTransactions));
-    localStorage.setItem(`app_rec_acc_tx_${activeSessionId}`, JSON.stringify(accountingTransactions));
-    localStorage.setItem(`app_rec_diffs_${activeSessionId}`, JSON.stringify(differences));
-    localStorage.setItem(`app_rec_jvs_${activeSessionId}`, JSON.stringify(journalEntries));
+    if (activeSessionId && activeSessionId !== 'rec-session-fresh') {
+      localStorage.setItem(`app_rec_bank_tx_${activeSessionId}`, JSON.stringify(bankTransactions));
+      localStorage.setItem(`app_rec_acc_tx_${activeSessionId}`, JSON.stringify(accountingTransactions));
+      localStorage.setItem(`app_rec_diffs_${activeSessionId}`, JSON.stringify(differences));
+      localStorage.setItem(`app_rec_jvs_${activeSessionId}`, JSON.stringify(journalEntries));
+    }
     localStorage.setItem('app_rec_settings', JSON.stringify(settings));
     localStorage.setItem('app_rec_permissions', JSON.stringify(permissions));
 
-    // حفظ فوري في قاعدة بيانات MySQL على الخادم / الدومين
-    if (activeSession) {
+    // حفظ فوري في قاعدة بيانات MySQL على الخادم / الدومين فقط إذا كانت هناك جلسات مسجلة ومفتوحة
+    if (sessions.length > 0 && activeSession && activeSession.id !== 'rec-session-fresh') {
       dbService.saveReconciliationSessionToDb(
         activeSession,
         bankTransactions,
@@ -246,17 +398,28 @@ export function BankReconciliationView({
     }
   };
 
-  // Re-calculate Summary
+  // Re-calculate Summary dynamically without any hardcoded ghost balances
   const summary: ReconciliationSummary = useMemo(() => {
-    const accClosing = 54180.700; // Calculated from initial ledger balance
+    let accClosing = 0;
+    if (sessions.length > 0 && activeSession) {
+      if (typeof activeSession.closingBalanceAccounting === 'number' && activeSession.closingBalanceAccounting !== 0) {
+        accClosing = activeSession.closingBalanceAccounting;
+      } else if (accountingTransactions.length > 0) {
+        const netLedger = accountingTransactions.reduce((sum, tx) => sum + (tx.debit || 0) - (tx.credit || 0), 0);
+        accClosing = (activeSession.openingBalanceAccounting || 0) + netLedger;
+      }
+    } else if (accountingTransactions.length > 0) {
+      accClosing = accountingTransactions.reduce((sum, tx) => sum + (tx.debit || 0) - (tx.credit || 0), 0);
+    }
+
     return calculateReconciliationSummary(
-      bankClosingBal,
+      bankClosingBal || 0,
       accClosing,
       bankTransactions,
       accountingTransactions,
       differences
     );
-  }, [bankClosingBal, bankTransactions, accountingTransactions, differences]);
+  }, [bankClosingBal, activeSession, sessions.length, bankTransactions, accountingTransactions, differences]);
 
   // Mask bank account helper
   const formatMaskedAccount = (accNum: string) => {
@@ -542,6 +705,16 @@ export function BankReconciliationView({
           {/* Action Toolbar */}
           <div className="flex flex-wrap items-center gap-2">
             
+            {/* New Session Button */}
+            <button
+              onClick={handleCreateNewSession}
+              className="px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white transition shadow-xs"
+              title="بدء دورة مطابقة بنكية جديدة"
+            >
+              <Plus className="w-4 h-4" />
+              <span>دورة جديدة</span>
+            </button>
+
             {/* Run Match */}
             <button
               onClick={handleRunMatching}

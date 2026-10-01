@@ -23,6 +23,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { BankAccount, ChequeBook, ChequePrintSettings, ChequeSizeTemplate } from '../../types';
+import { compressChequeImage } from '../../utils/imageOptimizer';
 import { STANDARD_CHEQUE_SIZES } from '../../mockCheques';
 
 interface ChequeBooksSettingsProps {
@@ -203,7 +204,7 @@ export function ChequeBooksSettings({
   };
 
   // Handle Account Cheque Image Upload (base64)
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -212,15 +213,10 @@ export function ChequeBooksSettings({
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      setUploadError('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 8 ميغابايت');
-      return;
-    }
-
     setUploadError('');
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      const optimized = await compressChequeImage(file);
+      const dataUrl = optimized.dataUrl;
       if (dataUrl) {
         setAccountForm((prev) => {
           // Also update default template image if present
@@ -235,19 +231,21 @@ export function ChequeBooksSettings({
           };
         });
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Account image upload error:', err);
+      setUploadError('تعذر معالجة الصورة المرفوعة');
+    }
   };
 
   // Handle Template Cheque Image Upload
-  const handleTemplateImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTemplateImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      const optimized = await compressChequeImage(file);
+      const dataUrl = optimized.dataUrl;
       if (dataUrl) {
         setTemplateForm((prev) => ({
           ...prev,
@@ -255,8 +253,9 @@ export function ChequeBooksSettings({
           chequeImageName: file.name,
         }));
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Template image upload error:', err);
+    }
   };
 
   // Save Account Handler

@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings, ChequeSizeTemplate } from '../../types';
 import { tafqeetKwd, tafqeetKwdEn, formatChequeAmount } from '../../utils/tafqeetKwd';
-import { CBK_CHEQUE_BASE_COORDS } from './ChequeCalibrationTab';
+import { CBK_CHEQUE_BASE_COORDS, computeChequeFieldPositions } from '../../utils/chequeCoords';
+import { compressChequeImage } from '../../utils/imageOptimizer';
 
 interface IssueChequeFormProps {
   bankAccounts: BankAccount[];
@@ -49,12 +50,30 @@ export function IssueChequeForm({
   onAddNewBeneficiary,
   prefillBeneficiaryId,
 }: IssueChequeFormProps) {
+  // Fallback safe bank account when no accounts exist (after reset)
+  const fallbackAccount: BankAccount = {
+    id: 'acc-default',
+    accountName: 'الحساب المصرفي الرئيسي',
+    bankName: 'البنك التجاري الكويتي (CBK)',
+    bankCode: 'CBK',
+    accountNumber: '1020491823',
+    iban: 'KW18CBKU000000001020491823',
+    branchName: 'الفرع الرئيسي',
+    currency: 'د.ك',
+    currentBalance: 0,
+    isDefault: true,
+    status: 'active',
+    chequeTemplate: 'CBK',
+    chequeWidthCm: 18.0,
+    chequeHeightCm: 9.0,
+  };
+
   // Active Account
   const effectiveAccountId = selectedAccountId === 'all' 
-    ? (bankAccounts[0]?.id || 'acc-cbk-main') 
+    ? (bankAccounts[0]?.id || 'acc-default') 
     : selectedAccountId;
   
-  const activeAccount = bankAccounts.find((a) => a.id === effectiveAccountId) || bankAccounts[0];
+  const activeAccount = bankAccounts.find((a) => a.id === effectiveAccountId) || bankAccounts[0] || fallbackAccount;
 
   // Cheque books for this account
   const accountBooks = chequeBooks.filter((b) => b.bankAccountId === effectiveAccountId && b.status === 'active');
@@ -102,7 +121,7 @@ export function IssueChequeForm({
   const [uploadMessage, setUploadMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleChequeImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChequeImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -111,9 +130,11 @@ export function IssueChequeForm({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      setUploadMessage('جاري معالجة وضبط أبعاد صورة الشيك لمقاس 9×18 سم...');
+      const optimized = await compressChequeImage(file);
+      const dataUrl = optimized.dataUrl;
+
       if (dataUrl && onUpdatePrintSettings) {
         const updated: ChequePrintSettings = {
           ...printSettings,
@@ -124,13 +145,16 @@ export function IssueChequeForm({
         try {
           localStorage.setItem('app_cheque_print_settings', JSON.stringify(updated));
         } catch (err) {
-          console.error(err);
+          console.error('LocalStorage save error:', err);
         }
-        setUploadMessage(`تم رفع وحفظ صورة الشيك بنجاح وتطبيق مقاس 9×18 سم: ${file.name}`);
+        setUploadMessage(`تم رفع واعتماد صورة الشيك بنجاح وتطبيق مقاس 9×18 سم: ${file.name}`);
         setTimeout(() => setUploadMessage(''), 4500);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Cheque image upload error:', err);
+      setUploadMessage(`تعذر معالجة الصورة: ${err?.message || 'خطأ غير معروف'}`);
+    }
+
     if (e.target) {
       e.target.value = '';
     }
@@ -185,7 +209,11 @@ export function IssueChequeForm({
   const currentHeightCm = currentTemplate?.heightCm || activeAccount?.chequeHeightCm || 9.0;
   const currentWidthMm = Math.round(currentWidthCm * 10);
   const currentHeightMm = Math.round(currentHeightCm * 10);
-  const currentChequeImage = currentTemplate?.chequeImageUrl || activeAccount?.chequeImageUrl || printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg';
+  // Priority: custom uploaded image always takes priority so the user sees their upload immediately!
+  const currentChequeImage = printSettings.customChequeImageUrl 
+    || currentTemplate?.chequeImageUrl 
+    || activeAccount?.chequeImageUrl 
+    || './cbk_cheque_bg.jpg';
 
   // Synchronize when book changes
   useEffect(() => {
@@ -230,30 +258,35 @@ export function IssueChequeForm({
     setAmountInWords(tafqeetLang === 'en' ? tafqeetKwdEn(amount) : tafqeetKwd(amount));
   };
 
-  // Calculated dynamic coordinates from calibration / printSettings for live preview
-  const previewDateLeft = Math.round((CBK_CHEQUE_BASE_COORDS.date.left + (printSettings.offsetX || 0) + (printSettings.dateOffsetX || 0)) * 10) / 10;
-  const previewDateTop = Math.round((CBK_CHEQUE_BASE_COORDS.date.top + (printSettings.offsetY || 0) + (printSettings.dateOffsetY || 0)) * 10) / 10;
-  const previewDateWidth = Math.round((printSettings.dateWidth ?? CBK_CHEQUE_BASE_COORDS.date.width) * 10) / 10;
-  const previewDateHeight = Math.round((printSettings.dateHeight ?? CBK_CHEQUE_BASE_COORDS.date.height) * 10) / 10;
-  const previewDateFontSize = printSettings.dateFontSize ?? CBK_CHEQUE_BASE_COORDS.date.fontSize;
+  // Calculated dynamic coordinates and alignments from calibration / printSettings for live preview
+  const previewCoords = computeChequeFieldPositions(printSettings, currentWidthMm, currentHeightMm, currentTemplate);
+  const previewDateLeft = previewCoords.date.left;
+  const previewDateTop = previewCoords.date.top;
+  const previewDateWidth = previewCoords.date.width;
+  const previewDateHeight = previewCoords.date.height;
+  const previewDateFontSize = previewCoords.date.fontSize;
+  const previewDateAlign = previewCoords.date.align;
 
-  const previewPayeeLeft = Math.round((CBK_CHEQUE_BASE_COORDS.payee.left + (printSettings.offsetX || 0) + (printSettings.payeeOffsetX || 0)) * 10) / 10;
-  const previewPayeeTop = Math.round((CBK_CHEQUE_BASE_COORDS.payee.top + (printSettings.offsetY || 0) + (printSettings.payeeOffsetY || 0)) * 10) / 10;
-  const previewPayeeWidth = Math.round((printSettings.payeeWidth ?? CBK_CHEQUE_BASE_COORDS.payee.width) * 10) / 10;
-  const previewPayeeHeight = Math.round((printSettings.payeeHeight ?? CBK_CHEQUE_BASE_COORDS.payee.height) * 10) / 10;
-  const previewPayeeFontSize = printSettings.payeeFontSize ?? CBK_CHEQUE_BASE_COORDS.payee.fontSize;
+  const previewPayeeLeft = previewCoords.payee.left;
+  const previewPayeeTop = previewCoords.payee.top;
+  const previewPayeeWidth = previewCoords.payee.width;
+  const previewPayeeHeight = previewCoords.payee.height;
+  const previewPayeeFontSize = previewCoords.payee.fontSize;
+  const previewPayeeAlign = previewCoords.payee.align;
 
-  const previewWordsLeft = Math.round((CBK_CHEQUE_BASE_COORDS.words.left + (printSettings.offsetX || 0) + (printSettings.wordsOffsetX || 0)) * 10) / 10;
-  const previewWordsTop = Math.round((CBK_CHEQUE_BASE_COORDS.words.top + (printSettings.offsetY || 0) + (printSettings.wordsOffsetY || 0)) * 10) / 10;
-  const previewWordsWidth = Math.round((printSettings.wordsWidth ?? CBK_CHEQUE_BASE_COORDS.words.width) * 10) / 10;
-  const previewWordsHeight = Math.round((printSettings.wordsHeight ?? CBK_CHEQUE_BASE_COORDS.words.height) * 10) / 10;
-  const previewWordsFontSize = printSettings.wordsFontSize ?? CBK_CHEQUE_BASE_COORDS.words.fontSize;
+  const previewWordsLeft = previewCoords.words.left;
+  const previewWordsTop = previewCoords.words.top;
+  const previewWordsWidth = previewCoords.words.width;
+  const previewWordsHeight = previewCoords.words.height;
+  const previewWordsFontSize = previewCoords.words.fontSize;
+  const previewWordsAlign = previewCoords.words.align;
 
-  const previewAmountLeft = Math.round((CBK_CHEQUE_BASE_COORDS.amount.left + (printSettings.offsetX || 0) + (printSettings.amountOffsetX || 0)) * 10) / 10;
-  const previewAmountTop = Math.round((CBK_CHEQUE_BASE_COORDS.amount.top + (printSettings.offsetY || 0) + (printSettings.amountOffsetY || 0)) * 10) / 10;
-  const previewAmountWidth = Math.round((printSettings.amountWidth ?? CBK_CHEQUE_BASE_COORDS.amount.width) * 10) / 10;
-  const previewAmountHeight = Math.round((printSettings.amountHeight ?? CBK_CHEQUE_BASE_COORDS.amount.height) * 10) / 10;
-  const previewAmountFontSize = printSettings.amountFontSize ?? CBK_CHEQUE_BASE_COORDS.amount.fontSize;
+  const previewAmountLeft = previewCoords.amount.left;
+  const previewAmountTop = previewCoords.amount.top;
+  const previewAmountWidth = previewCoords.amount.width;
+  const previewAmountHeight = previewCoords.amount.height;
+  const previewAmountFontSize = previewCoords.amount.fontSize;
+  const previewAmountAlign = previewCoords.amount.align;
 
   // Build the issued cheque object
   const buildChequeObject = (): IssuedCheque => {
@@ -670,17 +703,23 @@ export function IssueChequeForm({
 
               {/* 1. حقل التاريخ DATE */}
               <div 
-                className="absolute flex items-center justify-center font-mono font-black text-slate-950 tracking-widest z-10 overflow-hidden"
+                className="absolute flex items-center font-mono font-black text-slate-950 tracking-widest z-10 overflow-hidden"
                 style={{
                   left: `${(previewDateLeft / currentWidthMm) * 100}%`,
                   top: `${(previewDateTop / currentHeightMm) * 100}%`,
                   width: `${(previewDateWidth / currentWidthMm) * 100}%`,
                   height: `${(previewDateHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewDateFontSize}px`,
+                  justifyContent: previewDateAlign === 'right' ? 'flex-end' : previewDateAlign === 'left' ? 'flex-start' : 'center',
                 }}
                 title="التاريخ"
               >
-                <span className="w-full h-full flex items-center justify-center text-center font-black font-mono tracking-widest truncate select-none px-0.5">
+                <span 
+                  style={{ textAlign: previewDateAlign }}
+                  className={`w-full h-full flex items-center font-black font-mono tracking-widest truncate select-none px-0.5 ${
+                    previewDateAlign === 'right' ? 'justify-end text-right' : previewDateAlign === 'left' ? 'justify-start text-left' : 'justify-center text-center'
+                  }`}
+                >
                   {dayStr}/{monthStr}/{yearStr}
                 </span>
               </div>
@@ -695,10 +734,16 @@ export function IssueChequeForm({
                   width: `${(previewPayeeWidth / currentWidthMm) * 100}%`,
                   height: `${(previewPayeeHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewPayeeFontSize}px`,
+                  justifyContent: previewPayeeAlign === 'right' ? 'flex-start' : previewPayeeAlign === 'left' ? 'flex-end' : 'center',
                 }}
                 title="اسم المستفيد"
               >
-                <span className="truncate block w-full text-right font-serif font-black text-slate-950">
+                <span 
+                  style={{ textAlign: previewPayeeAlign }}
+                  className={`truncate block w-full font-serif font-black text-slate-950 ${
+                    previewPayeeAlign === 'right' ? 'text-right' : previewPayeeAlign === 'left' ? 'text-left' : 'text-center'
+                  }`}
+                >
                   {beneficiaryName || '...................................................'}
                 </span>
               </div>
@@ -713,12 +758,15 @@ export function IssueChequeForm({
                   width: `${(previewWordsWidth / currentWidthMm) * 100}%`,
                   height: `${(previewWordsHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewWordsFontSize}px`,
+                  justifyContent: previewWordsAlign === 'right' ? 'flex-start' : previewWordsAlign === 'left' ? 'flex-end' : 'center',
                 }}
                 title="المبلغ كتابة (التفقيط)"
               >
                 <span 
-                  className="line-clamp-2 break-words block w-full text-slate-950 font-serif font-bold text-right leading-tight max-h-full overflow-hidden"
-                  style={{ fontSize: `${previewWordsFontSize}px`, lineHeight: 1.2 }}
+                  className={`line-clamp-2 break-words block w-full text-slate-950 font-serif font-bold leading-tight max-h-full overflow-hidden ${
+                    previewWordsAlign === 'right' ? 'text-right' : previewWordsAlign === 'left' ? 'text-left' : 'text-center'
+                  }`}
+                  style={{ fontSize: `${previewWordsFontSize}px`, lineHeight: 1.2, textAlign: previewWordsAlign }}
                 >
                   {amountInWords || '...................................................'}
                 </span>
@@ -726,19 +774,22 @@ export function IssueChequeForm({
 
               {/* 4. حقل المبلغ رقماً */}
               <div 
-                className="absolute flex items-center justify-center font-mono font-black text-slate-950 z-10 overflow-hidden"
+                className="absolute flex items-center font-mono font-black text-slate-950 z-10 overflow-hidden"
                 style={{
                   left: `${(previewAmountLeft / currentWidthMm) * 100}%`,
                   top: `${(previewAmountTop / currentHeightMm) * 100}%`,
                   width: `${(previewAmountWidth / currentWidthMm) * 100}%`,
                   height: `${(previewAmountHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewAmountFontSize}px`,
+                  justifyContent: previewAmountAlign === 'right' ? 'flex-end' : previewAmountAlign === 'left' ? 'flex-start' : 'center',
                 }}
                 title="المبلغ رقماً"
               >
                 <span 
-                  className="w-full h-full flex items-center justify-center font-mono font-black text-slate-950 tracking-wider truncate text-center"
-                  style={{ fontSize: `${previewAmountFontSize}px` }}
+                  className={`w-full h-full flex items-center font-mono font-black text-slate-950 tracking-wider truncate ${
+                    previewAmountAlign === 'right' ? 'justify-end text-right' : previewAmountAlign === 'left' ? 'justify-start text-left' : 'justify-center text-center'
+                  }`}
+                  style={{ fontSize: `${previewAmountFontSize}px`, textAlign: previewAmountAlign }}
                 >
                   {formatChequeAmount(amount)}
                 </span>

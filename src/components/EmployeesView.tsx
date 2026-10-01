@@ -209,7 +209,16 @@ export function EmployeesView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredEmployees.map((emp) => {
+              {filteredEmployees.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-12 text-center text-slate-400 bg-slate-50/50">
+                    <Users className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                    <p className="font-bold text-slate-700">لا يوجد موظفون مسجلون حالياً</p>
+                    <p className="text-xs text-slate-400 mt-1">اضغط على زر "إضافة موظف جديد" بالأعلى لتسجيل موظفي المنشأة بعد التصفير.</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredEmployees.map((emp) => {
                 const branch = branches.find((b) => b.id === emp.branchId);
                 const department = departments.find((d) => d.id === emp.departmentId);
                 const resStatus = getResidenceStatus(emp.residenceExpiryDate);
@@ -287,8 +296,9 @@ export function EmployeesView({
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
+              })
+            )}
+          </tbody>
           </table>
         </div>
       </div>

@@ -30,6 +30,15 @@ export const INITIAL_CHEQUE_PRINT_SETTINGS: ChequePrintSettings = {
   amountWidth: 42,
   amountHeight: 12.5,
   amountFontSize: 14,
+  dateAlign: 'center',
+  payeeAlign: 'right',
+  wordsAlign: 'right',
+  amountAlign: 'center',
+  feedOrientation: 'portrait_90',
+  feedAlignment: 'center',
+  paperType: 'a4_feed',
+  trayOffsetX: 0,
+  trayOffsetY: 0,
 };
 
 export const DEFAULT_PRINT_SETTINGS: ChequePrintSettings = INITIAL_CHEQUE_PRINT_SETTINGS;

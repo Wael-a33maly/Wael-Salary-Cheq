@@ -55,6 +55,7 @@ $tables = [
     'reconciliation_bank_tx',
     'reconciliation_ledger_tx',
     'reconciliation_diffs',
+    'reconciliation_jvs',
     'reconciliation_journal_entries',
     'users',
     'audit_log'

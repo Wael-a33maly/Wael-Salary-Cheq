@@ -960,7 +960,18 @@ export function PayrollView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredRows.map((r) => (
+                  {filteredRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={14} className="p-12 text-center text-slate-400 bg-slate-50/50">
+                        <Users className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                        <p className="font-bold text-slate-700">لا يوجد موظفون مدرجون في هذا المسير حالياً</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          يمكنك إضافة موظفين جدد من تبويب "الموظفون" لبدء احتساب الرواتب بعد التصفير.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRows.map((r) => (
                     <tr key={r.emp.id} className="hover:bg-slate-50/70 transition">
                       <td className="p-2.5">
                         <div className="font-bold text-slate-900">{r.emp.fullName}</div>
@@ -1061,8 +1072,9 @@ export function PayrollView({
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  ))
+                )}
+              </tbody>
                 {/* Table Footer */}
                 <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
                   <tr>

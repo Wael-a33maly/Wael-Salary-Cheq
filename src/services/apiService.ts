@@ -377,6 +377,51 @@ class DatabaseService {
   }
 
   /**
+   * تسجيل الدخول والتحقق الآمن من اسم المستخدم وكلمة المرور
+   */
+  async login(username: string, password: string): Promise<{ success: boolean; user?: any; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        return {
+          success: false,
+          error: json.error || 'اسم المستخدم أو كلمة المرور غير صحيحة',
+        };
+      }
+      return {
+        success: true,
+        user: json.user,
+      };
+    } catch {
+      // إذا تعذر الوصول لـ API (مثل وضع أوفلاين) يتم فحص الحساب الافتراضي فقط بدقة
+      if (username === 'admin' && password === 'Admin@2026!') {
+        return {
+          success: true,
+          user: {
+            id: 1,
+            username: 'admin',
+            fullName: 'المسؤول العام للنظام',
+            role: 'admin',
+          },
+        };
+      }
+      return {
+        success: false,
+        error: 'اسم المستخدم أو كلمة المرور غير صحيحة',
+      };
+    }
+  }
+
+  /**
    * نظام إعادة التعيين وحذف البيانات المحددة في قاعدة بيانات MySQL
    */
   async resetDataInDb(items: string[], preserveChequeImages = true): Promise<{ success: boolean; message?: string; wiped?: string[] }> {

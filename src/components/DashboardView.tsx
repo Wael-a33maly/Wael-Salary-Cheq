@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Users, 
   Building2, 
@@ -14,7 +14,7 @@ import {
   Sparkles,
   Landmark
 } from 'lucide-react';
-import { Branch, Employee, AuditRecord, CompanySettings } from '../types';
+import { Branch, Employee, AuditRecord, CompanySettings, MonthlyPayroll } from '../types';
 import { getResidenceStatus } from '../mockData';
 
 interface DashboardViewProps {
@@ -23,6 +23,7 @@ interface DashboardViewProps {
   auditLogs: AuditRecord[];
   settings: CompanySettings;
   onNavigate: (tab: string) => void;
+  payrolls?: MonthlyPayroll[];
 }
 
 export function DashboardView({
@@ -31,11 +32,25 @@ export function DashboardView({
   auditLogs,
   settings,
   onNavigate,
+  payrolls = [],
 }: DashboardViewProps) {
-  // حساب الإحصائيات
+  // حساب الإحصائيات الحية المتكيفة
   const activeEmployees = employees.filter((e) => e.status === 'active');
   const activeBranches = branches.filter((b) => b.status === 'active');
-  const totalBasic = employees.reduce((sum, e) => sum + e.basicSalary, 0);
+  const totalBasic = activeEmployees.reduce((sum, e) => sum + (e.basicSalary || 0), 0);
+
+  // حساب وفر الخزينة التراكمي من المسيرات أو الموظفين الفعليين
+  const totalRoundingSavings = useMemo(() => {
+    if (payrolls && payrolls.length > 0) {
+      const sum = payrolls.reduce((acc, p) => acc + (p.totals?.roundingDiff || 0), 0);
+      if (sum > 0) return sum;
+    }
+    const step = settings.roundingStep || 0.050;
+    return activeEmployees.reduce((sum, e) => {
+      const rounded = Math.floor(e.basicSalary / step) * step;
+      return sum + (e.basicSalary - rounded);
+    }, 0);
+  }, [payrolls, activeEmployees, settings.roundingStep]);
 
   // حساب تنبيهات الإقامات
   const alertEmployees = employees
@@ -45,6 +60,72 @@ export function DashboardView({
     }))
     .filter((e) => e.resStatus.category !== 'valid')
     .sort((a, b) => a.resStatus.daysRemaining - b.resStatus.daysRemaining);
+
+  // أسماء الفروع العاملة الحالية
+  const activeBranchNames = activeBranches.length > 0
+    ? activeBranches.map((b) => b.name).join('، ')
+    : 'لا توجد فروع مضافة حالياً';
+
+  // مسار تطور تكلفة الرواتب المتكيف ديناميكياً
+  const monthlyTrend = useMemo(() => {
+    const monthNamesAr = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthIdx = now.getMonth();
+
+    if (payrolls && payrolls.length > 0) {
+      const sorted = [...payrolls].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
+      const recent = sorted.slice(-6);
+      const maxVal = Math.max(...recent.map((p) => p.totals?.net || p.totals?.basic || 1000), 1000) * 1.15;
+      return recent.map((p, idx) => ({
+        month: p.monthName,
+        total: p.totals?.net || p.totals?.basic || 0,
+        max: maxVal,
+        current: idx === recent.length - 1,
+      }));
+    }
+
+    // توليد مسار آخر 6 أشهر متكيف مع الراتب الإجمالي الحالي
+    const result = [];
+    for (let i = 5; i >= 0; i--) {
+      let mIdx = currentMonthIdx - i;
+      let y = currentYear;
+      if (mIdx < 0) {
+        mIdx += 12;
+        y -= 1;
+      }
+      const isCurrent = i === 0;
+      const total = activeEmployees.length > 0 ? totalBasic : 0;
+      result.push({
+        month: `${monthNamesAr[mIdx]} ${y}${isCurrent ? ' (الحالي)' : ''}`,
+        total,
+        max: totalBasic > 0 ? totalBasic * 1.2 : 1000,
+        current: isCurrent,
+      });
+    }
+    return result;
+  }, [payrolls, activeEmployees.length, totalBasic]);
+
+  // توزيع الرواتب الفعلي الحقيقي حسب الفروع
+  const branchDistribution = useMemo(() => {
+    return branches.map((b) => {
+      const bEmps = employees.filter((e) => e.branchId === b.id && e.status === 'active');
+      const bSalary = bEmps.reduce((sum, e) => sum + (e.basicSalary || 0), 0);
+      const bPct = totalBasic > 0 ? Math.round((bSalary / totalBasic) * 100) : 0;
+      return {
+        ...b,
+        calculatedSalary: bSalary,
+        calculatedCount: bEmps.length,
+        pct: bPct,
+      };
+    });
+  }, [branches, employees, totalBasic]);
 
   return (
     <div className="max-w-7xl mx-auto py-6 space-y-6">
@@ -179,8 +260,8 @@ export function DashboardView({
             <div className="text-2xl font-black text-slate-900 font-mono">
               {activeBranches.length} <span className="text-xs font-sans text-slate-500">فروع</span>
             </div>
-            <div className="text-[11px] text-slate-500 font-bold mt-1">
-              العاصمة، حولي، الفروانية، الأحمدي
+            <div className="text-[11px] text-slate-500 font-bold mt-1 truncate max-w-full" title={activeBranchNames}>
+              {activeBranchNames}
             </div>
           </div>
         </div>
@@ -213,10 +294,10 @@ export function DashboardView({
           </div>
           <div>
             <div className="text-2xl font-black text-amber-700 font-mono">
-              18.650 <span className="text-xs font-sans text-slate-500">د.ك</span>
+              {totalRoundingSavings.toFixed(3)} <span className="text-xs font-sans text-slate-500">د.ك</span>
             </div>
             <div className="text-[11px] text-amber-700 font-bold mt-1">
-              تراكمي الفلس (Floor 0.050)
+              تراكمي الفلس (Floor {settings.roundingStep || 0.050})
             </div>
           </div>
         </div>
@@ -319,15 +400,8 @@ export function DashboardView({
 
           {/* Bar Chart Visualization */}
           <div className="space-y-3 pt-2">
-            {[
-              { month: 'أبريل 2026', total: 4320.000, max: 5000 },
-              { month: 'مايو 2026', total: 4390.500, max: 5000 },
-              { month: 'يونيو 2026', total: 4410.250, max: 5000 },
-              { month: 'يوليو 2026', total: 4450.000, max: 5000 },
-              { month: 'أغسطس 2026', total: 4465.750, max: 5000 },
-              { month: 'سبتمبر 2026 (الحالي)', total: 4475.250, max: 5000, current: true },
-            ].map((item, idx) => {
-              const pct = (item.total / item.max) * 100;
+            {monthlyTrend.map((item, idx) => {
+              const pct = item.max > 0 ? Math.min(100, Math.round((item.total / item.max) * 100)) : 0;
               return (
                 <div key={idx} className="space-y-1">
                   <div className="flex justify-between text-xs font-bold">
@@ -361,28 +435,32 @@ export function DashboardView({
           </div>
 
           <div className="space-y-3 pt-1">
-            {branches.map((b) => {
-              const bSalary = b.totalSalary || 1000;
-              const bPct = Math.round((bSalary / totalBasic) * 100) || 25;
-              return (
+            {branchDistribution.length > 0 ? (
+              branchDistribution.map((b) => (
                 <div key={b.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <div className="flex justify-between items-center text-xs mb-1.5">
                     <div className="font-bold text-slate-800">{b.name}</div>
-                    <span className="font-mono font-bold text-blue-600">{bSalary.toFixed(3)} د.ك ({bPct}%)</span>
+                    <span className="font-mono font-bold text-blue-600">
+                      {b.calculatedSalary.toFixed(3)} د.ك ({b.pct}%)
+                    </span>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-indigo-600 h-full rounded-full"
-                      style={{ width: `${bPct}%` }}
+                      className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${b.pct}%` }}
                     ></div>
                   </div>
                   <div className="flex justify-between text-[10px] text-slate-500 mt-1">
                     <span>الكود: {b.code}</span>
-                    <span>{b.employeeCount || 3} موظفين</span>
+                    <span>{b.calculatedCount} موظف</span>
                   </div>
                 </div>
-              );
-            })}
+              ))
+            ) : (
+              <div className="p-4 text-center text-xs text-slate-400">
+                لا توجد فروع مضافة حالياً
+              </div>
+            )}
           </div>
         </div>
 
@@ -405,7 +483,7 @@ export function DashboardView({
                 <span>إعداد مسير الرواتب</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </div>
-              <p className="text-[11px] text-blue-700 mt-1">احتساب شهر سبتمبر والقسائم والتقريب</p>
+              <p className="text-[11px] text-blue-700 mt-1">احتساب مسير رواتب الشهر والقسائم والتقريب</p>
             </button>
 
             <button

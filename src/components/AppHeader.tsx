@@ -212,7 +212,7 @@ export function AppHeader({
 
             <button
               type="button"
-              onClick={() => onNavigateToCheques?.('print')}
+              onClick={() => onNavigateToCheques?.('issue')}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition border bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700"
               title="إصدار وطباعة شيك جديد"
             >

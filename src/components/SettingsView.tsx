@@ -458,11 +458,19 @@ export function SettingsView({
   const RESET_OPTIONS = [
     {
       id: 'payrolls',
-      title: 'مسيرات الرواتب وسجلات الشهور المعتمدة',
-      description: 'حذف كافة كروت مسيرات الرواتب المحفوظة، استقطاعات الغياب، الساعات الإضافية، السلف وقسائم الصرف.',
+      title: 'مسيرات الرواتب وسجلات الشهور المعتمدة (الأرشيف المالي)',
+      description: 'حذف وتصفير كافة كروت مسيرات الرواتب المحفوظة، الأرشيف المالي للشهور والسنوات السابقة (تقرير 7)، استقطاعات الغياب، الساعات الإضافية، السلف وقسائم الصرف.',
       countLabel: `${dataCounts?.payrolls ?? 0} مسير محفوظ`,
       icon: FileText,
       color: 'emerald',
+    },
+    {
+      id: 'archive',
+      title: 'الأرشيف المالي للشهور والسنوات السابقة والنسخ الاحتياطية',
+      description: 'حذف وتصفير الأرشيف المالي بالكامل (تقرير رقم 7)، كشوف الشهور والسنوات السابقة المؤرشفة، وسجلات النسخ الاحتياطية المحفوظة محلياً وعلى السيرفر.',
+      countLabel: `${backups.length} نسخة مؤرشفة`,
+      icon: FileArchive,
+      color: 'dark',
     },
     {
       id: 'employees',
@@ -546,6 +554,11 @@ export function SettingsView({
         ? ['all', ...selectedResetItems] 
         : selectedResetItems;
 
+      if (itemsToWipe.includes('all') || itemsToWipe.includes('payrolls') || itemsToWipe.includes('archive')) {
+        setBackups([]);
+        localStorage.setItem('app_backup_archive', '[]');
+      }
+
       const result = await onResetData(itemsToWipe, wipeRemoteDb, backupConfig.preserveImagesOnReset);
       setShowConfirmModal(false);
       setConfirmInputText('');
@@ -553,7 +566,7 @@ export function SettingsView({
       setResetSuccessMessage(
         result && typeof result === 'object' && 'message' in result && result.message
           ? result.message
-          : 'تم إعادة التعيين وحذف البيانات المحددة بنجاح!'
+          : 'تم تصفير وإعادة تعيين البنود المحددة بنجاح!'
       );
       setTimeout(() => setResetSuccessMessage(null), 5000);
     } catch (err: any) {
@@ -567,6 +580,10 @@ export function SettingsView({
     if (!onResetData) return;
     setIsFullResetting(true);
     try {
+      // تفريغ سجلات النسخ والأرشيف المالي كلياً
+      setBackups([]);
+      localStorage.setItem('app_backup_archive', '[]');
+
       // تنفيذ تصفير شامل لكافة البيانات بدون الاحتفاظ بأي صور أو قوالب أو سجلات
       const result = await onResetData(['all'], true, false);
       setShowFullResetModal(false);
@@ -575,7 +592,7 @@ export function SettingsView({
       setResetSuccessMessage(
         result && typeof result === 'object' && 'message' in result && result.message
           ? result.message
-          : 'تم تصفير النظام بالكامل بنجاح على السيرفر والمحلي! التطبيق الآن نظيف وجاهز للتشغيل والرفع على السيرفر ببيانات جديدة كلياً.'
+          : 'تم تصفير النظام بالكامل بنجاح على السيرفر والمحلي! التطبيق الآن فارغ ونظيف وجاهز للتشغيل والرفع على السيرفر ببيانات جديدة كلياً.'
       );
       setTimeout(() => setResetSuccessMessage(null), 7000);
     } catch (err: any) {
@@ -1524,11 +1541,34 @@ export function SettingsView({
 
           {/* Footer Actions */}
           <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
-              <span>
-                الحذف محمي أمنياً بنافذة تأكيد مسبقة لضمان عدم حدوث أي تصفير غير مقصود.
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                <span>
+                  الحذف والتصفير محمي أمنياً بنافذة تأكيد مسبقة لمنع أي إجراء غير مقصود.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm('هل ترغب في إعادة تحميل البيانات التجريبية الأولية للنظام؟ سيتم استرجاع أمثلة للموظفين والفروع والشيكات والمسيرات.')) return;
+                  localStorage.removeItem('payroll_saved_months');
+                  localStorage.removeItem('payroll_employees');
+                  localStorage.removeItem('payroll_branches');
+                  localStorage.removeItem('payroll_departments');
+                  localStorage.removeItem('app_issued_cheques');
+                  localStorage.removeItem('app_cheque_books');
+                  localStorage.removeItem('app_bank_accounts');
+                  localStorage.removeItem('app_beneficiaries');
+                  localStorage.removeItem('app_backup_archive');
+                  localStorage.removeItem('payroll_settings');
+                  window.location.reload();
+                }}
+                className="text-[11px] text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 font-bold transition whitespace-nowrap"
+                title="إعادة تحميل أمثلة البيانات التوضيحية"
+              >
+                تحميل بيانات تجريبية (Demo Data)
+              </button>
             </div>
 
             <button

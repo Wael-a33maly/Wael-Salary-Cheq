@@ -28,11 +28,17 @@ import {
   FileCheck,
   Sparkles,
   Upload,
-  Trash2
+  Trash2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight
 } from 'lucide-react';
 import { ChequePrintSettings, BankAccount, ChequeSizeTemplate } from '../../types';
 import { DEFAULT_PRINT_SETTINGS } from '../../mockCheques';
 import { formatChequeAmount } from '../../utils/tafqeetKwd';
+import { compressChequeImage } from '../../utils/imageOptimizer';
+import { CBK_CHEQUE_BASE_COORDS, getChequeBaseCoords, computeChequeFieldPositions } from '../../utils/chequeCoords';
+export { CBK_CHEQUE_BASE_COORDS };
 
 interface ChequeCalibrationTabProps {
   printSettings: ChequePrintSettings;
@@ -52,15 +58,6 @@ type DragMode =
   | 'resize-bl' 
   | 'resize-br' 
   | null;
-
-// Base coordinates on an official 180mm x 90mm cheque (Width 18cm, Height 9cm)
-// Derived directly from the physical CBK cheque layout (Right-to-Left Arabic orientation)
-export const CBK_CHEQUE_BASE_COORDS = {
-  date: { left: 134, top: 12, width: 36, height: 8.5, fontSize: 12 },
-  payee: { left: 16, top: 29, width: 120, height: 8.5, fontSize: 13 },
-  words: { left: 54, top: 41, width: 84, height: 9.5, fontSize: 11 },
-  amount: { left: 10, top: 38, width: 42, height: 12.5, fontSize: 14 },
-};
 
 export function ChequeCalibrationTab({
   printSettings,
@@ -111,9 +108,12 @@ export function ChequeCalibrationTab({
   const calibHeightCm = activeTemplate?.heightCm || activeAccount?.chequeHeightCm || 9.0;
   const calibWidthMm = Math.round(calibWidthCm * 10);
   const calibHeightMm = Math.round(calibHeightCm * 10);
-  const calibChequeImage = activeTemplate?.chequeImageUrl || activeAccount?.chequeImageUrl || printSettings.customChequeImageUrl || '/cbk_cheque_bg.jpg';
-
   const [calibration, setCalibration] = useState<ChequePrintSettings>(printSettings);
+  const calibChequeImage = calibration.customChequeImageUrl 
+    || printSettings.customChequeImageUrl 
+    || activeTemplate?.chequeImageUrl 
+    || activeAccount?.chequeImageUrl 
+    || './cbk_cheque_bg.jpg';
   const [selectedField, setSelectedField] = useState<SelectedField>('payee');
   const [stepSize, setStepSize] = useState<number>(0.5); // mm
   const [showRuler, setShowRuler] = useState<boolean>(true);
@@ -149,14 +149,242 @@ export function ChequeCalibrationTab({
     return () => window.removeEventListener('afterprint', handleAfterPrint);
   }, []);
 
+  // Exact millimeter coordinates, dimensions, and text alignments computed dynamically
+  // for the active physical cheque dimensions (calibWidthMm x calibHeightMm)
+  const coordsMap = computeChequeFieldPositions(calibration, calibWidthMm, calibHeightMm, activeTemplate);
+  const { date: dateField, payee: payeeField, words: wordsField, amount: amountField } = coordsMap;
+
+  const dateLeft = dateField.left;
+  const dateTop = dateField.top;
+  const dateWidth = dateField.width;
+  const dateHeight = dateField.height;
+  const dateFontSize = dateField.fontSize;
+  const dateAlign = dateField.align;
+
+  const payeeLeft = payeeField.left;
+  const payeeTop = payeeField.top;
+  const payeeWidth = payeeField.width;
+  const payeeHeight = payeeField.height;
+  const payeeFontSize = payeeField.fontSize;
+  const payeeAlign = payeeField.align;
+
+  const wordsLeft = wordsField.left;
+  const wordsTop = wordsField.top;
+  const wordsWidth = wordsField.width;
+  const wordsHeight = wordsField.height;
+  const wordsFontSize = wordsField.fontSize;
+  const wordsAlign = wordsField.align;
+
+  const amountLeft = amountField.left;
+  const amountTop = amountField.top;
+  const amountWidth = amountField.width;
+  const amountHeight = amountField.height;
+  const amountFontSize = amountField.fontSize;
+  const amountAlign = amountField.align;
+
   const handleTriggerPrint = () => {
-    document.body.classList.add('printing-cheque-mode');
-    setTimeout(() => {
-      window.print();
+    try {
+      let iframe = document.getElementById('cheque-calibration-print-iframe') as HTMLIFrameElement;
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'cheque-calibration-print-iframe';
+        iframe.style.position = 'fixed';
+        iframe.style.top = '-10000px';
+        iframe.style.left = '-10000px';
+        iframe.style.width = '300mm';
+        iframe.style.height = '300mm';
+        iframe.style.border = 'none';
+        iframe.style.opacity = '0';
+        iframe.style.pointerEvents = 'none';
+        iframe.style.zIndex = '-9999';
+        document.body.appendChild(iframe);
+      } else {
+        iframe.style.top = '-10000px';
+        iframe.style.left = '-10000px';
+        iframe.style.width = '300mm';
+        iframe.style.height = '300mm';
+      }
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) {
+        window.print();
+        return;
+      }
+
+      const feedOrient = calibration.feedOrientation || 'portrait_90';
+      const isPortrait = feedOrient === 'portrait_90' || feedOrient === 'portrait_270';
+      const isA4Feed = (calibration.paperType || 'a4_feed') === 'a4_feed';
+      const a4WidthMm = 210;
+      const feedWidthMm = isPortrait ? calibHeightMm : calibWidthMm;
+
+      let baseTrayX = 0;
+      if (isA4Feed) {
+        if ((calibration.feedAlignment || 'center') === 'center') {
+          baseTrayX = Math.round((a4WidthMm - feedWidthMm) / 2); // 60mm for 90mm portrait on HP Laser 107w!
+        } else if (calibration.feedAlignment === 'right') {
+          baseTrayX = Math.round(a4WidthMm - feedWidthMm);
+        } else {
+          baseTrayX = 0;
+        }
+      }
+
+      const finalTrayX = baseTrayX + (calibration.trayOffsetX || 0);
+      const finalTrayY = (calibration.trayOffsetY || 0);
+
+      const pageSizeCss = isA4Feed 
+        ? '210mm 297mm portrait' 
+        : (isPortrait ? `${calibHeightMm}mm ${calibWidthMm}mm portrait` : `${calibWidthMm}mm ${calibHeightMm}mm landscape`);
+      
+      const bodyWidthCss = isA4Feed ? '210mm' : (isPortrait ? `${calibHeightMm}mm` : `${calibWidthMm}mm`);
+      const bodyHeightCss = isA4Feed ? '297mm' : (isPortrait ? `${calibWidthMm}mm` : `${calibHeightMm}mm`);
+
+      const transformCss = feedOrient === 'portrait_90'
+        ? `transform-origin: 0 0; transform: translate(${finalTrayX}mm, ${finalTrayY + calibWidthMm}mm) rotate(-90deg);`
+        : feedOrient === 'portrait_270'
+        ? `transform-origin: 0 0; transform: translate(${finalTrayX + calibHeightMm}mm, ${finalTrayY}mm) rotate(90deg);`
+        : `transform-origin: 0 0; transform: translate(${finalTrayX}mm, ${finalTrayY}mm);`;
+
+      const backgroundLayerHtml = testPrintMode === 'with_bg'
+        ? `<img src="${calibChequeImage}" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: fill; z-index: 0;" />`
+        : '';
+
+      const gridLayerHtml = testPrintMode === 'a4_alignment' ? `
+        <div style="position: absolute; inset: 0; pointer-events: none; border: 1px dashed #3b82f6; z-index: 5; background-image: linear-gradient(to right, rgba(59, 130, 246, 0.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(59, 130, 246, 0.25) 1px, transparent 1px); background-size: 10mm 10mm;">
+          <div style="position: absolute; top: 2mm; left: 3mm; font-size: 8px; font-family: monospace; color: #2563eb; background: rgba(255,255,255,0.85); padding: 1px 4px; border-radius: 2px;">
+            مقاس الشيك: ${calibWidthMm}×${calibHeightMm} مم | شبكة 10 مم
+          </div>
+        </div>
+      ` : '';
+
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html dir="ltr">
+        <head>
+          <meta charset="utf-8" />
+          <title>طباعة تجريبية لمعايرة الشيك</title>
+          <style>
+            @page {
+              size: ${pageSizeCss};
+              margin: 0mm !important;
+            }
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
+            html, body {
+              width: ${bodyWidthCss};
+              height: ${bodyHeightCss};
+              margin: 0 !important;
+              padding: 0 !important;
+              background: ${testPrintMode === 'with_bg' ? '#fff' : 'transparent'};
+              position: relative;
+              font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .cheque-print-surface {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: ${calibWidthMm}mm;
+              height: ${calibHeightMm}mm;
+              ${transformCss}
+            }
+            .date-field {
+              position: absolute;
+              left: ${dateLeft}mm;
+              top: ${dateTop}mm;
+              width: ${dateWidth}mm;
+              height: ${dateHeight}mm;
+              line-height: ${dateHeight}mm;
+              font-size: ${dateFontSize}px;
+              font-family: monospace;
+              font-weight: 900;
+              color: #000;
+              text-align: ${dateAlign};
+              z-index: 10;
+              border: ${testPrintMode === 'a4_alignment' ? '0.5px solid rgba(59, 130, 246, 0.4)' : 'none'};
+            }
+            .payee-field {
+              position: absolute;
+              left: ${payeeLeft}mm;
+              top: ${payeeTop}mm;
+              width: ${payeeWidth}mm;
+              height: ${payeeHeight}mm;
+              line-height: ${payeeHeight}mm;
+              font-size: ${payeeFontSize}px;
+              font-family: serif, 'Cairo', sans-serif;
+              font-weight: 900;
+              color: #000;
+              text-align: ${payeeAlign};
+              direction: rtl;
+              white-space: nowrap;
+              overflow: hidden;
+              box-sizing: border-box;
+              padding: 0 1mm;
+              z-index: 10;
+              border: ${testPrintMode === 'a4_alignment' ? '0.5px solid rgba(16, 185, 129, 0.4)' : 'none'};
+            }
+            .words-field {
+              position: absolute;
+              left: ${wordsLeft}mm;
+              top: ${wordsTop}mm;
+              width: ${wordsWidth}mm;
+              height: ${wordsHeight}mm;
+              font-size: ${wordsFontSize}px;
+              font-family: 'Cairo', sans-serif;
+              font-weight: 900;
+              color: #000;
+              text-align: ${wordsAlign};
+              direction: rtl;
+              line-height: 1.25;
+              overflow: hidden;
+              box-sizing: border-box;
+              padding: 0 1mm;
+              z-index: 10;
+              border: ${testPrintMode === 'a4_alignment' ? '0.5px solid rgba(147, 51, 234, 0.4)' : 'none'};
+            }
+            .amount-field {
+              position: absolute;
+              left: ${amountLeft}mm;
+              top: ${amountTop}mm;
+              width: ${amountWidth}mm;
+              height: ${amountHeight}mm;
+              line-height: ${amountHeight}mm;
+              font-size: ${amountFontSize}px;
+              font-family: monospace;
+              font-weight: 900;
+              color: #000;
+              text-align: ${amountAlign};
+              z-index: 10;
+              border: ${testPrintMode === 'a4_alignment' ? '0.5px solid rgba(217, 119, 6, 0.4)' : 'none'};
+            }
+          </style>
+        </head>
+        <body>
+          <div class="cheque-print-surface">
+            ${backgroundLayerHtml}
+            ${gridLayerHtml}
+            <div class="date-field">${testChequeData.date}</div>
+            <div class="payee-field">${testChequeData.payee}</div>
+            <div class="words-field">${testChequeData.words}</div>
+            <div class="amount-field">${formatChequeAmount(testChequeData.amount)}</div>
+          </div>
+        </body>
+        </html>
+      `);
+      doc.close();
+
       setTimeout(() => {
-        document.body.classList.remove('printing-cheque-mode');
-      }, 1000);
-    }, 200);
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      }, 350);
+    } catch (e) {
+      console.warn('Iframe print error:', e);
+      window.print();
+    }
   };
 
   // Dragging and Resizing state
@@ -180,30 +408,24 @@ export function ChequeCalibrationTab({
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Calculate actual coordinates (in mm)
-  const dateLeft = Math.round((CBK_CHEQUE_BASE_COORDS.date.left + (calibration.offsetX || 0) + (calibration.dateOffsetX || 0)) * 10) / 10;
-  const dateTop = Math.round((CBK_CHEQUE_BASE_COORDS.date.top + (calibration.offsetY || 0) + (calibration.dateOffsetY || 0)) * 10) / 10;
-  const dateWidth = Math.round((calibration.dateWidth ?? CBK_CHEQUE_BASE_COORDS.date.width) * 10) / 10;
-  const dateHeight = Math.round((calibration.dateHeight ?? CBK_CHEQUE_BASE_COORDS.date.height) * 10) / 10;
-  const dateFontSize = calibration.dateFontSize ?? CBK_CHEQUE_BASE_COORDS.date.fontSize;
+  const handleSetAlign = (field: SelectedField, align: 'right' | 'center' | 'left') => {
+    setCalibration((prev) => {
+      const next = { ...prev };
+      if (field === 'payee') next.payeeAlign = align;
+      else if (field === 'words') next.wordsAlign = align;
+      else if (field === 'date') next.dateAlign = align;
+      else if (field === 'amount') next.amountAlign = align;
+      return next;
+    });
+  };
 
-  const payeeLeft = Math.round((CBK_CHEQUE_BASE_COORDS.payee.left + (calibration.offsetX || 0) + (calibration.payeeOffsetX || 0)) * 10) / 10;
-  const payeeTop = Math.round((CBK_CHEQUE_BASE_COORDS.payee.top + (calibration.offsetY || 0) + (calibration.payeeOffsetY || 0)) * 10) / 10;
-  const payeeWidth = Math.round((calibration.payeeWidth ?? CBK_CHEQUE_BASE_COORDS.payee.width) * 10) / 10;
-  const payeeHeight = Math.round((calibration.payeeHeight ?? CBK_CHEQUE_BASE_COORDS.payee.height) * 10) / 10;
-  const payeeFontSize = calibration.payeeFontSize ?? CBK_CHEQUE_BASE_COORDS.payee.fontSize;
-
-  const wordsLeft = Math.round((CBK_CHEQUE_BASE_COORDS.words.left + (calibration.offsetX || 0) + (calibration.wordsOffsetX || 0)) * 10) / 10;
-  const wordsTop = Math.round((CBK_CHEQUE_BASE_COORDS.words.top + (calibration.offsetY || 0) + (calibration.wordsOffsetY || 0)) * 10) / 10;
-  const wordsWidth = Math.round((calibration.wordsWidth ?? CBK_CHEQUE_BASE_COORDS.words.width) * 10) / 10;
-  const wordsHeight = Math.round((calibration.wordsHeight ?? CBK_CHEQUE_BASE_COORDS.words.height) * 10) / 10;
-  const wordsFontSize = calibration.wordsFontSize ?? CBK_CHEQUE_BASE_COORDS.words.fontSize;
-
-  const amountLeft = Math.round((CBK_CHEQUE_BASE_COORDS.amount.left + (calibration.offsetX || 0) + (calibration.amountOffsetX || 0)) * 10) / 10;
-  const amountTop = Math.round((CBK_CHEQUE_BASE_COORDS.amount.top + (calibration.offsetY || 0) + (calibration.amountOffsetY || 0)) * 10) / 10;
-  const amountWidth = Math.round((calibration.amountWidth ?? CBK_CHEQUE_BASE_COORDS.amount.width) * 10) / 10;
-  const amountHeight = Math.round((calibration.amountHeight ?? CBK_CHEQUE_BASE_COORDS.amount.height) * 10) / 10;
-  const amountFontSize = calibration.amountFontSize ?? CBK_CHEQUE_BASE_COORDS.amount.fontSize;
+  const getCurrentAlign = (field: SelectedField): 'right' | 'center' | 'left' => {
+    if (field === 'payee') return payeeAlign;
+    if (field === 'words') return wordsAlign;
+    if (field === 'date') return dateAlign;
+    if (field === 'amount') return amountAlign;
+    return 'right';
+  };
 
   // Move handler using D-Pad
   const handleNudge = (dx: number, dy: number) => {
@@ -231,26 +453,27 @@ export function ChequeCalibrationTab({
 
   // Dimension adjust handler (width / height)
   const handleAdjustDimension = (field: SelectedField, dWidth: number, dHeight: number) => {
+    const curBase = getChequeBaseCoords(calibWidthMm, calibHeightMm);
     setCalibration((prev) => {
       const next = { ...prev };
       if (field === 'date') {
-        const curW = next.dateWidth ?? CBK_CHEQUE_BASE_COORDS.date.width;
-        const curH = next.dateHeight ?? CBK_CHEQUE_BASE_COORDS.date.height;
+        const curW = next.dateWidth ?? curBase.date.width;
+        const curH = next.dateHeight ?? curBase.date.height;
         next.dateWidth = Math.max(10, Math.round((curW + dWidth) * 10) / 10);
         next.dateHeight = Math.max(4, Math.round((curH + dHeight) * 10) / 10);
       } else if (field === 'payee') {
-        const curW = next.payeeWidth ?? CBK_CHEQUE_BASE_COORDS.payee.width;
-        const curH = next.payeeHeight ?? CBK_CHEQUE_BASE_COORDS.payee.height;
+        const curW = next.payeeWidth ?? curBase.payee.width;
+        const curH = next.payeeHeight ?? curBase.payee.height;
         next.payeeWidth = Math.max(20, Math.round((curW + dWidth) * 10) / 10);
         next.payeeHeight = Math.max(4, Math.round((curH + dHeight) * 10) / 10);
       } else if (field === 'words') {
-        const curW = next.wordsWidth ?? CBK_CHEQUE_BASE_COORDS.words.width;
-        const curH = next.wordsHeight ?? CBK_CHEQUE_BASE_COORDS.words.height;
+        const curW = next.wordsWidth ?? curBase.words.width;
+        const curH = next.wordsHeight ?? curBase.words.height;
         next.wordsWidth = Math.max(20, Math.round((curW + dWidth) * 10) / 10);
         next.wordsHeight = Math.max(5, Math.round((curH + dHeight) * 10) / 10);
       } else if (field === 'amount') {
-        const curW = next.amountWidth ?? CBK_CHEQUE_BASE_COORDS.amount.width;
-        const curH = next.amountHeight ?? CBK_CHEQUE_BASE_COORDS.amount.height;
+        const curW = next.amountWidth ?? curBase.amount.width;
+        const curH = next.amountHeight ?? curBase.amount.height;
         next.amountWidth = Math.max(15, Math.round((curW + dWidth) * 10) / 10);
         next.amountHeight = Math.max(5, Math.round((curH + dHeight) * 10) / 10);
       }
@@ -260,19 +483,20 @@ export function ChequeCalibrationTab({
 
   // Font size adjust handler
   const handleAdjustFontSize = (field: SelectedField, delta: number) => {
+    const curBase = getChequeBaseCoords(calibWidthMm, calibHeightMm);
     setCalibration((prev) => {
       const next = { ...prev };
       if (field === 'date') {
-        const cur = next.dateFontSize ?? CBK_CHEQUE_BASE_COORDS.date.fontSize;
+        const cur = next.dateFontSize ?? curBase.date.fontSize;
         next.dateFontSize = Math.max(8, Math.min(22, cur + delta));
       } else if (field === 'payee') {
-        const cur = next.payeeFontSize ?? CBK_CHEQUE_BASE_COORDS.payee.fontSize;
+        const cur = next.payeeFontSize ?? curBase.payee.fontSize;
         next.payeeFontSize = Math.max(8, Math.min(22, cur + delta));
       } else if (field === 'words') {
-        const cur = next.wordsFontSize ?? CBK_CHEQUE_BASE_COORDS.words.fontSize;
+        const cur = next.wordsFontSize ?? curBase.words.fontSize;
         next.wordsFontSize = Math.max(8, Math.min(20, cur + delta));
       } else if (field === 'amount') {
-        const cur = next.amountFontSize ?? CBK_CHEQUE_BASE_COORDS.amount.fontSize;
+        const cur = next.amountFontSize ?? curBase.amount.fontSize;
         next.amountFontSize = Math.max(9, Math.min(26, cur + delta));
       }
       return next;
@@ -287,6 +511,7 @@ export function ChequeCalibrationTab({
     setDragMode(mode);
     setDraggingField(field);
 
+    const curBase = getChequeBaseCoords(calibWidthMm, calibHeightMm);
     let initX = 0;
     let initY = 0;
     let initW = 0;
@@ -295,23 +520,23 @@ export function ChequeCalibrationTab({
     if (field === 'date') {
       initX = calibration.dateOffsetX || 0;
       initY = calibration.dateOffsetY || 0;
-      initW = calibration.dateWidth ?? CBK_CHEQUE_BASE_COORDS.date.width;
-      initH = calibration.dateHeight ?? CBK_CHEQUE_BASE_COORDS.date.height;
+      initW = calibration.dateWidth ?? curBase.date.width;
+      initH = calibration.dateHeight ?? curBase.date.height;
     } else if (field === 'payee') {
       initX = calibration.payeeOffsetX || 0;
       initY = calibration.payeeOffsetY || 0;
-      initW = calibration.payeeWidth ?? CBK_CHEQUE_BASE_COORDS.payee.width;
-      initH = calibration.payeeHeight ?? CBK_CHEQUE_BASE_COORDS.payee.height;
+      initW = calibration.payeeWidth ?? curBase.payee.width;
+      initH = calibration.payeeHeight ?? curBase.payee.height;
     } else if (field === 'words') {
       initX = calibration.wordsOffsetX || 0;
       initY = calibration.wordsOffsetY || 0;
-      initW = calibration.wordsWidth ?? CBK_CHEQUE_BASE_COORDS.words.width;
-      initH = calibration.wordsHeight ?? CBK_CHEQUE_BASE_COORDS.words.height;
+      initW = calibration.wordsWidth ?? curBase.words.width;
+      initH = calibration.wordsHeight ?? curBase.words.height;
     } else if (field === 'amount') {
       initX = calibration.amountOffsetX || 0;
       initY = calibration.amountOffsetY || 0;
-      initW = calibration.amountWidth ?? CBK_CHEQUE_BASE_COORDS.amount.width;
-      initH = calibration.amountHeight ?? CBK_CHEQUE_BASE_COORDS.amount.height;
+      initW = calibration.amountWidth ?? curBase.amount.width;
+      initH = calibration.amountHeight ?? curBase.amount.height;
     } else if (field === 'all') {
       initX = calibration.offsetX || 0;
       initY = calibration.offsetY || 0;
@@ -334,9 +559,9 @@ export function ChequeCalibrationTab({
     const rect = canvasRef.current.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
 
-    // Direct conversion: 180mm width maps to container rect.width
-    const deltaX_mm = ((e.clientX - dragStartRef.current.startX) / rect.width) * 180;
-    const deltaY_mm = ((e.clientY - dragStartRef.current.startY) / rect.height) * 90;
+    // Direct conversion: calibWidthMm maps to container rect.width and calibHeightMm to rect.height
+    const deltaX_mm = ((e.clientX - dragStartRef.current.startX) / rect.width) * calibWidthMm;
+    const deltaY_mm = ((e.clientY - dragStartRef.current.startY) / rect.height) * calibHeightMm;
 
     setCalibration((prev) => {
       const next = { ...prev };
@@ -524,6 +749,7 @@ export function ChequeCalibrationTab({
   // Reset to default coordinates
   const handleReset = () => {
     if (confirm('هل أنت متأكد من إعادة ضبط كافة أبعاد ومواقع حقول الشيك إلى القيم الافتراضية الأصلية؟')) {
+      const curBase = getChequeBaseCoords(calibWidthMm, calibHeightMm);
       const resetSettings: ChequePrintSettings = {
         ...DEFAULT_PRINT_SETTINGS,
         templateMode: 'vector_template',
@@ -539,18 +765,22 @@ export function ChequeCalibrationTab({
         wordsOffsetY: 0,
         amountOffsetX: 0,
         amountOffsetY: 0,
-        dateWidth: CBK_CHEQUE_BASE_COORDS.date.width,
-        dateHeight: CBK_CHEQUE_BASE_COORDS.date.height,
-        payeeWidth: CBK_CHEQUE_BASE_COORDS.payee.width,
-        payeeHeight: CBK_CHEQUE_BASE_COORDS.payee.height,
-        wordsWidth: CBK_CHEQUE_BASE_COORDS.words.width,
-        wordsHeight: CBK_CHEQUE_BASE_COORDS.words.height,
-        amountWidth: CBK_CHEQUE_BASE_COORDS.amount.width,
-        amountHeight: CBK_CHEQUE_BASE_COORDS.amount.height,
-        dateFontSize: CBK_CHEQUE_BASE_COORDS.date.fontSize,
-        payeeFontSize: CBK_CHEQUE_BASE_COORDS.payee.fontSize,
-        wordsFontSize: CBK_CHEQUE_BASE_COORDS.words.fontSize,
-        amountFontSize: CBK_CHEQUE_BASE_COORDS.amount.fontSize,
+        dateWidth: curBase.date.width,
+        dateHeight: curBase.date.height,
+        payeeWidth: curBase.payee.width,
+        payeeHeight: curBase.payee.height,
+        wordsWidth: curBase.words.width,
+        wordsHeight: curBase.words.height,
+        amountWidth: curBase.amount.width,
+        amountHeight: curBase.amount.height,
+        dateFontSize: curBase.date.fontSize,
+        payeeFontSize: curBase.payee.fontSize,
+        wordsFontSize: curBase.words.fontSize,
+        amountFontSize: curBase.amount.fontSize,
+        dateAlign: 'center',
+        payeeAlign: 'right',
+        wordsAlign: 'right',
+        amountAlign: 'center',
       };
       setCalibration(resetSettings);
       onUpdatePrintSettings(resetSettings);
@@ -617,8 +847,8 @@ export function ChequeCalibrationTab({
           title: 'الشيك بالكامل (إزاحة عامة لكافة الحقول)',
           x: calibration.offsetX || 0,
           y: calibration.offsetY || 0,
-          w: 180,
-          h: 90,
+          w: calibWidthMm,
+          h: calibHeightMm,
           font: 0,
           offsetX: calibration.offsetX || 0,
           offsetY: calibration.offsetY || 0,
@@ -769,7 +999,7 @@ export function ChequeCalibrationTab({
                 <span>منطقة السحب والإفلات وتغيير المقاسات</span>
               </span>
               <span className="text-[11px] text-slate-500 font-mono">
-                (180mm × 90mm)
+                ({calibWidthMm}mm × {calibHeightMm}mm)
               </span>
             </div>
 
@@ -812,12 +1042,12 @@ export function ChequeCalibrationTab({
                   id="calibration-upload-cheque-input"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                      const dataUrl = event.target?.result as string;
+                    try {
+                      const optimized = await compressChequeImage(file);
+                      const dataUrl = optimized.dataUrl;
                       if (dataUrl) {
                         const updated: ChequePrintSettings = {
                           ...calibration,
@@ -826,10 +1056,16 @@ export function ChequeCalibrationTab({
                         };
                         setCalibration(updated);
                         onUpdatePrintSettings(updated);
+                        try {
+                          localStorage.setItem('app_cheque_print_settings', JSON.stringify(updated));
+                        } catch (err) {
+                          console.error('LocalStorage save error:', err);
+                        }
                         setBgViewMode('scanned');
                       }
-                    };
-                    reader.readAsDataURL(file);
+                    } catch (err) {
+                      console.error('Calibration image error:', err);
+                    }
                     if (e.target) e.target.value = '';
                   }}
                 />
@@ -946,28 +1182,28 @@ export function ChequeCalibrationTab({
               }}
               className="relative select-none flex flex-col"
             >
-              {/* TOP HORIZONTAL RULER (0 to 180 mm) */}
+              {/* TOP HORIZONTAL RULER (0 to calibWidthMm) */}
               {showRuler && (
                 <div 
                   className={`h-6 bg-amber-50/90 border-t border-x border-amber-200 rounded-t flex items-end relative overflow-hidden font-mono text-[8px] text-amber-900 select-none ${
                     showRuler ? 'mr-5' : ''
                   }`}
                 >
-                  {Array.from({ length: 19 }).map((_, i) => {
+                  {Array.from({ length: Math.floor(calibWidthMm / 10) + 1 }).map((_, i) => {
                     const mm = i * 10;
                     return (
                       <React.Fragment key={mm}>
                         <div
                           className="absolute bottom-0 flex flex-col items-center"
-                          style={{ left: `${(mm / 180) * 100}%`, transform: 'translateX(-50%)' }}
+                          style={{ left: `${(mm / calibWidthMm) * 100}%`, transform: 'translateX(-50%)' }}
                         >
                           <span className="text-[8px] font-bold leading-none mb-0.5">{mm}</span>
                           <div className={`w-[1px] bg-amber-500 ${mm % 20 === 0 ? 'h-2.5' : 'h-1.5'}`} />
                         </div>
-                        {i < 18 && (
+                        {mm + 5 <= calibWidthMm && (
                           <div
                             className="absolute bottom-0 w-[1px] h-1 bg-amber-300"
-                            style={{ left: `${((mm + 5) / 180) * 100}%`, transform: 'translateX(-50%)' }}
+                            style={{ left: `${((mm + 5) / calibWidthMm) * 100}%`, transform: 'translateX(-50%)' }}
                           />
                         )}
                       </React.Fragment>
@@ -1144,10 +1380,12 @@ export function ChequeCalibrationTab({
                     </span>
 
                     {/* Content strictly within field bounds */}
-                    <div className="w-full h-full flex items-center justify-center font-mono font-black text-slate-950 overflow-hidden text-center truncate px-0.5 select-none">
+                    <div className="w-full h-full flex items-center font-mono font-black text-slate-950 overflow-hidden px-1 select-none" style={{ justifyContent: dateAlign === 'right' ? 'flex-end' : dateAlign === 'left' ? 'flex-start' : 'center' }}>
                       <span 
-                        style={{ fontSize: `${dateFontSize}px` }} 
-                        className="tracking-widest font-black text-slate-950 truncate max-w-full"
+                        style={{ fontSize: `${dateFontSize}px`, textAlign: dateAlign }} 
+                        className={`tracking-widest font-black text-slate-950 truncate w-full ${
+                          dateAlign === 'right' ? 'text-right' : dateAlign === 'left' ? 'text-left' : 'text-center'
+                        }`}
                       >
                         25/04/2026
                       </span>
@@ -1179,10 +1417,12 @@ export function ChequeCalibrationTab({
                     </span>
 
                     {/* Content strictly within field bounds */}
-                    <div className="w-full h-full flex items-center font-serif font-black text-slate-950 text-right overflow-hidden px-1 select-none" dir="rtl">
+                    <div className="w-full h-full flex items-center font-serif font-black text-slate-950 overflow-hidden px-1 select-none" dir="rtl" style={{ justifyContent: payeeAlign === 'right' ? 'flex-start' : payeeAlign === 'left' ? 'flex-end' : 'center' }}>
                       <span 
-                        style={{ fontSize: `${payeeFontSize}px` }}
-                        className="truncate block w-full text-right font-black text-slate-950"
+                        style={{ fontSize: `${payeeFontSize}px`, textAlign: payeeAlign }}
+                        className={`truncate block w-full font-black text-slate-950 ${
+                          payeeAlign === 'right' ? 'text-right' : payeeAlign === 'left' ? 'text-left' : 'text-center'
+                        }`}
                       >
                         شركة البادية للمقاولات والتجارة العامة ذ.م.م
                       </span>
@@ -1214,10 +1454,12 @@ export function ChequeCalibrationTab({
                     </span>
 
                     {/* Content strictly within field bounds on up to 2 lines */}
-                    <div className="w-full h-full flex items-center text-right overflow-hidden px-1 select-none" dir="rtl">
+                    <div className="w-full h-full flex items-center overflow-hidden px-1 select-none" dir="rtl" style={{ justifyContent: wordsAlign === 'right' ? 'flex-start' : wordsAlign === 'left' ? 'flex-end' : 'center' }}>
                       <span 
-                        style={{ fontSize: `${wordsFontSize}px`, lineHeight: 1.2 }}
-                        className="line-clamp-2 break-words font-serif font-bold text-slate-950 text-right w-full max-h-full overflow-hidden"
+                        style={{ fontSize: `${wordsFontSize}px`, lineHeight: 1.2, textAlign: wordsAlign }}
+                        className={`line-clamp-2 break-words font-serif font-bold text-slate-950 w-full max-h-full overflow-hidden ${
+                          wordsAlign === 'right' ? 'text-right' : wordsAlign === 'left' ? 'text-left' : 'text-center'
+                        }`}
                       >
                         فقط خمسة وعشرون ألف وثلاثمائة وسبعون دينار كويتي وخمسمائة فلس لا غير #
                       </span>
@@ -1249,10 +1491,12 @@ export function ChequeCalibrationTab({
                     </span>
 
                     {/* Content strictly within field bounds formatted between # */}
-                    <div className="w-full h-full flex items-center justify-center font-mono font-black text-slate-950 overflow-hidden text-center px-1 select-none">
+                    <div className="w-full h-full flex items-center font-mono font-black text-slate-950 overflow-hidden px-1 select-none" style={{ justifyContent: amountAlign === 'right' ? 'flex-end' : amountAlign === 'left' ? 'flex-start' : 'center' }}>
                       <span 
-                        style={{ fontSize: `${amountFontSize}px` }}
-                        className="font-mono font-black tracking-wider text-slate-950 truncate text-center w-full"
+                        style={{ fontSize: `${amountFontSize}px`, textAlign: amountAlign }}
+                        className={`font-mono font-black tracking-wider text-slate-950 truncate w-full ${
+                          amountAlign === 'right' ? 'text-right' : amountAlign === 'left' ? 'text-left' : 'text-center'
+                        }`}
                       >
                         {formatChequeAmount(3500)}
                       </span>
@@ -1264,16 +1508,16 @@ export function ChequeCalibrationTab({
 
                 </div>
 
-                {/* LEFT VERTICAL RULER (0 to 90 mm) */}
+                {/* LEFT VERTICAL RULER (0 to calibHeightMm) */}
                 {showRuler && (
                   <div className="w-5 bg-amber-50/90 border-y border-l border-amber-200 rounded-l relative overflow-hidden font-mono text-[7px] text-amber-900 select-none flex-shrink-0">
-                    {Array.from({ length: 10 }).map((_, i) => {
+                    {Array.from({ length: Math.floor(calibHeightMm / 10) + 1 }).map((_, i) => {
                       const mm = i * 10;
                       return (
                         <div
                           key={mm}
                           className="absolute right-0 flex items-center"
-                          style={{ top: `${(mm / 90) * 100}%`, transform: 'translateY(-50%)' }}
+                          style={{ top: `${(mm / calibHeightMm) * 100}%`, transform: 'translateY(-50%)' }}
                         >
                           <span className="text-[7px] font-bold leading-none ml-0.5">{mm}</span>
                           <div className={`h-[1px] bg-amber-500 mr-0.5 ${mm % 20 === 0 ? 'w-2' : 'w-1.5'}`} />
@@ -1286,6 +1530,92 @@ export function ChequeCalibrationTab({
               </div>
             </div>
 
+          </div>
+
+          {/* Quick Field Alignment Bar (تحكم فوري بمحاذاة كافة الحقول) */}
+          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
+            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+              <AlignLeft className="w-4 h-4 text-amber-600" />
+              <span>تحكم سريع بمحاذاة النصوص (Text Alignment):</span>
+            </span>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Payee Align */}
+              <div className="flex items-center gap-1 bg-emerald-50/80 px-2 py-1 rounded-lg border border-emerald-200">
+                <span className="text-[11px] font-bold text-emerald-950">المستفيد:</span>
+                {(['right', 'center', 'left'] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    onClick={() => handleSetAlign('payee', align)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                      payeeAlign === align
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-emerald-800 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {align === 'right' ? 'يمين (افتراضي)' : align === 'center' ? 'وسط' : 'يسار'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Date Align */}
+              <div className="flex items-center gap-1 bg-blue-50/80 px-2 py-1 rounded-lg border border-blue-200">
+                <span className="text-[11px] font-bold text-blue-950">التاريخ:</span>
+                {(['center', 'right', 'left'] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    onClick={() => handleSetAlign('date', align)}
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition ${
+                      dateAlign === align
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-blue-800 hover:bg-blue-100'
+                    }`}
+                  >
+                    {align === 'right' ? 'يمين' : align === 'center' ? 'وسط' : 'يسار'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Words Align */}
+              <div className="flex items-center gap-1 bg-purple-50/80 px-2 py-1 rounded-lg border border-purple-200">
+                <span className="text-[11px] font-bold text-purple-950">التفقيط:</span>
+                {(['right', 'center', 'left'] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    onClick={() => handleSetAlign('words', align)}
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition ${
+                      wordsAlign === align
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-purple-800 hover:bg-purple-100'
+                    }`}
+                  >
+                    {align === 'right' ? 'يمين' : align === 'center' ? 'وسط' : 'يسار'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Amount Align */}
+              <div className="flex items-center gap-1 bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200">
+                <span className="text-[11px] font-bold text-amber-950">المبلغ:</span>
+                {(['center', 'right', 'left'] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    onClick={() => handleSetAlign('amount', align)}
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition ${
+                      amountAlign === align
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-amber-800 hover:bg-amber-100'
+                    }`}
+                  >
+                    {align === 'right' ? 'يمين' : align === 'center' ? 'وسط' : 'يسار'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Quick Field Legend */}
@@ -1312,6 +1642,207 @@ export function ChequeCalibrationTab({
         {/* Calibration Controls & Dimensions Panel (Col 4) */}
         <div className="xl:col-span-4 space-y-4">
           
+          {/* Card 0: اتجاه تلقيم الشيك في درج الطابعة (أفقي بالعرض أو رأسي بالطول) */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                <Printer className="w-3.5 h-3.5 text-blue-600" />
+                <span>طريقة تلقيم الشيك في درج الطابعة</span>
+              </h3>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                (calibration.feedOrientation || 'landscape') === 'landscape'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-amber-100 text-amber-900 font-mono'
+              }`}>
+                {(calibration.feedOrientation || 'landscape') === 'landscape' ? 'أفقي (18 سم)' : 'رأسي (9 سم)'}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-1.5 text-xs">
+                {/* Option 1: Horizontal / Landscape */}
+                <button
+                  type="button"
+                  onClick={() => setCalibration((prev) => ({ ...prev, feedOrientation: 'landscape' }))}
+                  className={`p-2.5 rounded-xl border text-right transition flex items-center justify-between ${
+                    (calibration.feedOrientation || 'landscape') === 'landscape'
+                      ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-500/20 text-blue-950 font-bold'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">↔️</span>
+                    <div>
+                      <span className="font-bold block">تلقيم أفقي بالعرض (18 سم أولاً)</span>
+                      <span className="text-[10px] text-slate-500 font-normal">الوضع العادي للورقة بالعرض (Landscape)</span>
+                    </div>
+                  </div>
+                  {(calibration.feedOrientation || 'landscape') === 'landscape' && (
+                    <Check className="w-4 h-4 text-blue-600 shrink-0" />
+                  )}
+                </button>
+
+                {/* Option 2: Vertical / Portrait 90° (Date & Amount side first) */}
+                <button
+                  type="button"
+                  onClick={() => setCalibration((prev) => ({ ...prev, feedOrientation: 'portrait_90' }))}
+                  className={`p-2.5 rounded-xl border text-right transition flex items-center justify-between ${
+                    calibration.feedOrientation === 'portrait_90'
+                      ? 'border-amber-600 bg-amber-50/80 ring-2 ring-amber-500/20 text-amber-950 font-bold'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">↕️</span>
+                    <div>
+                      <span className="font-bold block">تلقيم رأسي / طولي (9 سم - اتجاه التاريخ والمبلغ)</span>
+                      <span className="text-[10px] text-slate-500 font-normal">يدخل الشيك من حافة الـ 9 سم (تدوير 90° باتجاه التاريخ)</span>
+                    </div>
+                  </div>
+                  {calibration.feedOrientation === 'portrait_90' && (
+                    <Check className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                </button>
+
+                {/* Option 3: Vertical / Portrait 270° */}
+                <button
+                  type="button"
+                  onClick={() => setCalibration((prev) => ({ ...prev, feedOrientation: 'portrait_270' }))}
+                  className={`p-2.5 rounded-xl border text-right transition flex items-center justify-between ${
+                    calibration.feedOrientation === 'portrait_270'
+                      ? 'border-slate-800 bg-slate-100 ring-2 ring-slate-700/20 text-slate-900 font-bold'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🔄</span>
+                    <div>
+                      <span className="font-bold block">تلقيم رأسي عكسي (9 سم - تدوير 270°)</span>
+                      <span className="text-[10px] text-slate-500 font-normal">للطابعات التي تسحب الشيك بالاتجاه المعاكس</span>
+                    </div>
+                  </div>
+                  {calibration.feedOrientation === 'portrait_270' && (
+                    <Check className="w-4 h-4 text-slate-800 shrink-0" />
+                  )}
+                </button>
+              </div>
+
+              {/* Printer Tray Alignment (HP Laser 107w Center Tray vs Left vs Custom) */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">
+                  موضع الشيك في درج الطابعة (لطابعات HP Laser 107w وغيرها):
+                </span>
+                <div className="grid grid-cols-1 gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setCalibration((prev) => ({ ...prev, paperType: 'a4_feed', feedAlignment: 'center' }))}
+                    className={`p-2 rounded-xl border text-right transition flex items-center justify-between ${
+                      (calibration.paperType || 'a4_feed') === 'a4_feed' && (calibration.feedAlignment || 'center') === 'center'
+                        ? 'border-emerald-600 bg-emerald-50/80 ring-2 ring-emerald-500/20 text-emerald-950 font-bold'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🎯</span>
+                      <div>
+                        <span className="font-bold block">منتصف درج A4 (طابعات HP Laser 107w)</span>
+                        <span className="text-[10px] text-slate-500 font-normal">إزاحة تلقائية 60 مم لمحاذاة موجّهات HP في المنتصف</span>
+                      </div>
+                    </div>
+                    {(calibration.paperType || 'a4_feed') === 'a4_feed' && (calibration.feedAlignment || 'center') === 'center' && (
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCalibration((prev) => ({ ...prev, paperType: 'a4_feed', feedAlignment: 'left' }))}
+                    className={`p-2 rounded-xl border text-right transition flex items-center justify-between ${
+                      (calibration.paperType || 'a4_feed') === 'a4_feed' && calibration.feedAlignment === 'left'
+                        ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-500/20 text-blue-950 font-bold'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">⬅️</span>
+                      <div>
+                        <span className="font-bold block">أقصى يسار درج A4 (0 مم)</span>
+                        <span className="text-[10px] text-slate-500 font-normal">للطابعات التي يوضع فيها الشيك بمحاذاة الحافة اليسرى</span>
+                      </div>
+                    </div>
+                    {(calibration.paperType || 'a4_feed') === 'a4_feed' && calibration.feedAlignment === 'left' && (
+                      <Check className="w-4 h-4 text-blue-600 shrink-0" />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCalibration((prev) => ({ ...prev, paperType: 'custom_cheque_size' }))}
+                    className={`p-2 rounded-xl border text-right transition flex items-center justify-between ${
+                      calibration.paperType === 'custom_cheque_size'
+                        ? 'border-purple-600 bg-purple-50/80 ring-2 ring-purple-500/20 text-purple-950 font-bold'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🖨️</span>
+                      <div>
+                        <span className="font-bold block">مقاس الشيك المباشر (بدون A4)</span>
+                        <span className="text-[10px] text-slate-500 font-normal">لطابعات الشيكات المتخصصة والنقطية</span>
+                      </div>
+                    </div>
+                    {calibration.paperType === 'custom_cheque_size' && (
+                      <Check className="w-4 h-4 text-purple-600 shrink-0" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Fine Manual Tray Offset */}
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                  <span className="text-[11px] font-bold text-slate-700">إزاحة إضافية لموجّه الدرج:</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCalibration((prev) => ({ ...prev, trayOffsetX: (prev.trayOffsetX || 0) - 1 }))}
+                      className="w-6 h-6 flex items-center justify-center bg-white border border-slate-300 hover:bg-slate-200 rounded font-bold"
+                      title="تحريك يساراً 1 مم"
+                    >
+                      -
+                    </button>
+                    <span className="font-mono font-bold text-xs min-w-[32px] text-center">
+                      {(calibration.trayOffsetX || 0) > 0 ? `+${calibration.trayOffsetX}` : (calibration.trayOffsetX || 0)} مم
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCalibration((prev) => ({ ...prev, trayOffsetX: (prev.trayOffsetX || 0) + 1 }))}
+                      className="w-6 h-6 flex items-center justify-center bg-white border border-slate-300 hover:bg-slate-200 rounded font-bold"
+                      title="تحريك يميناً 1 مم"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feed Visual Diagram */}
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center space-y-1.5">
+                <span className="text-[10px] font-bold text-slate-600 block">رسم توضيحي لدرج الطابعة HP Laser 107w:</span>
+                <div className="flex items-center justify-center">
+                  {(calibration.feedOrientation || 'landscape') === 'landscape' ? (
+                    <div className="border border-blue-400 bg-blue-50 px-4 py-1.5 rounded text-[10px] font-mono text-blue-900 flex items-center gap-2">
+                      <span>درج A4 &bull; الشيك في المنتصف (15 مم) ⬅️ يدخل للدرج</span>
+                    </div>
+                  ) : (
+                    <div className="border border-amber-400 bg-amber-50 px-3 py-2 rounded text-[10px] font-mono text-amber-900 flex flex-col items-center gap-1">
+                      <div className="font-bold">🎯 درج A4 &bull; الشيك في منتصف الدرج (إزاحة 60 مم)</div>
+                      <div className="text-[9px] text-amber-700">⬇️ حافة الـ 9 سم (جهة التاريخ والمبلغ) تدخل أولاً ⬇️</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Card 1: Select Field To Calibrate */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
             <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2">
@@ -1476,6 +2007,55 @@ export function ChequeCalibrationTab({
                   </div>
                 </div>
 
+                {/* Text Alignment (محاذاة النص داخل الحقل) */}
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlignLeft className="w-3.5 h-3.5 text-slate-600" />
+                    <span className="text-[11px] font-bold text-slate-700">محاذاة النص (Align)</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-300">
+                    <button
+                      type="button"
+                      onClick={() => handleSetAlign(selectedField, 'right')}
+                      className={`px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                        getCurrentAlign(selectedField) === 'right'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      title="محاذاة لليمين"
+                    >
+                      <AlignRight className="w-3 h-3" />
+                      <span>يمين</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetAlign(selectedField, 'center')}
+                      className={`px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                        getCurrentAlign(selectedField) === 'center'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      title="محاذاة للوسط"
+                    >
+                      <AlignCenter className="w-3 h-3" />
+                      <span>وسط</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetAlign(selectedField, 'left')}
+                      className={`px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                        getCurrentAlign(selectedField) === 'left'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      title="محاذاة لليسار"
+                    >
+                      <AlignLeft className="w-3 h-3" />
+                      <span>يسار</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Live Real-World Position Info */}
                 <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 flex items-center justify-between text-xs font-mono">
                   <span className="font-sans font-bold text-amber-900 text-[11px]">الموقع الفعلي على الشيك:</span>
@@ -1574,36 +2154,41 @@ export function ChequeCalibrationTab({
               <button
                 type="button"
                 onClick={() => {
+                  const curBase = getChequeBaseCoords(calibWidthMm, calibHeightMm);
                   setCalibration((prev) => {
                     const next = { ...prev };
                     if (selectedField === 'all') { next.offsetX = 0; next.offsetY = 0; }
                     if (selectedField === 'date') { 
                       next.dateOffsetX = 0; 
                       next.dateOffsetY = 0; 
-                      next.dateWidth = CBK_CHEQUE_BASE_COORDS.date.width;
-                      next.dateHeight = CBK_CHEQUE_BASE_COORDS.date.height;
-                      next.dateFontSize = CBK_CHEQUE_BASE_COORDS.date.fontSize;
+                      next.dateWidth = curBase.date.width;
+                      next.dateHeight = curBase.date.height;
+                      next.dateFontSize = curBase.date.fontSize;
+                      next.dateAlign = 'center';
                     }
                     if (selectedField === 'payee') { 
                       next.payeeOffsetX = 0; 
                       next.payeeOffsetY = 0; 
-                      next.payeeWidth = CBK_CHEQUE_BASE_COORDS.payee.width;
-                      next.payeeHeight = CBK_CHEQUE_BASE_COORDS.payee.height;
-                      next.payeeFontSize = CBK_CHEQUE_BASE_COORDS.payee.fontSize;
+                      next.payeeWidth = curBase.payee.width;
+                      next.payeeHeight = curBase.payee.height;
+                      next.payeeFontSize = curBase.payee.fontSize;
+                      next.payeeAlign = 'right';
                     }
                     if (selectedField === 'words') { 
                       next.wordsOffsetX = 0; 
                       next.wordsOffsetY = 0; 
-                      next.wordsWidth = CBK_CHEQUE_BASE_COORDS.words.width;
-                      next.wordsHeight = CBK_CHEQUE_BASE_COORDS.words.height;
-                      next.wordsFontSize = CBK_CHEQUE_BASE_COORDS.words.fontSize;
+                      next.wordsWidth = curBase.words.width;
+                      next.wordsHeight = curBase.words.height;
+                      next.wordsFontSize = curBase.words.fontSize;
+                      next.wordsAlign = 'right';
                     }
                     if (selectedField === 'amount') { 
                       next.amountOffsetX = 0; 
                       next.amountOffsetY = 0; 
-                      next.amountWidth = CBK_CHEQUE_BASE_COORDS.amount.width;
-                      next.amountHeight = CBK_CHEQUE_BASE_COORDS.amount.height;
-                      next.amountFontSize = CBK_CHEQUE_BASE_COORDS.amount.fontSize;
+                      next.amountWidth = curBase.amount.width;
+                      next.amountHeight = curBase.amount.height;
+                      next.amountFontSize = curBase.amount.fontSize;
+                      next.amountAlign = 'center';
                     }
                     return next;
                   });
@@ -1857,7 +2442,8 @@ export function ChequeCalibrationTab({
             letterSpacing: '3px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: dateAlign === 'left' ? 'flex-start' : dateAlign === 'right' ? 'flex-end' : 'center',
+            textAlign: dateAlign,
             boxSizing: 'border-box',
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(59, 130, 246, 0.4)' : 'none',
           }}
@@ -1878,12 +2464,14 @@ export function ChequeCalibrationTab({
             fontFamily: 'sans-serif',
             fontWeight: 'bold',
             color: '#000000',
-            textAlign: 'right',
+            textAlign: payeeAlign,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: payeeAlign === 'center' ? 'center' : payeeAlign === 'left' ? 'flex-end' : 'flex-start',
             boxSizing: 'border-box',
+            padding: '0 1mm',
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(16, 185, 129, 0.4)' : 'none',
           }}
         >
@@ -1903,11 +2491,13 @@ export function ChequeCalibrationTab({
             fontFamily: 'sans-serif',
             fontWeight: '600',
             color: '#000000',
-            textAlign: 'right',
+            textAlign: wordsAlign,
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: wordsAlign === 'center' ? 'center' : wordsAlign === 'left' ? 'flex-end' : 'flex-start',
             boxSizing: 'border-box',
+            padding: '0 1mm',
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(147, 51, 234, 0.4)' : 'none',
           }}
         >
@@ -1920,6 +2510,7 @@ export function ChequeCalibrationTab({
               lineHeight: '1.25',
               width: '100%',
               wordBreak: 'break-word',
+              textAlign: wordsAlign,
             }}
           >
             {testChequeData.words}
@@ -1940,9 +2531,8 @@ export function ChequeCalibrationTab({
             color: '#000000',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
+            justifyContent: amountAlign === 'left' ? 'flex-start' : amountAlign === 'right' ? 'flex-end' : 'center',
+            textAlign: amountAlign,
             boxSizing: 'border-box',
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(217, 119, 6, 0.4)' : 'none',
           }}

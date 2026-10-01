@@ -58,40 +58,44 @@ export function ChequePrintingModule({
   const [dbSyncMessage, setDbSyncMessage] = useState<string>('جاري فحص الاتصال بقاعدة البيانات...');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Master State with LocalStorage persistence and Database sync
+  // Master State with LocalStorage persistence and Database sync (respects empty arrays on reset)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
     try {
       const saved = localStorage.getItem('app_bank_accounts');
-      return saved ? JSON.parse(saved) : INITIAL_BANK_ACCOUNTS;
-    } catch {
+      if (saved !== null) return JSON.parse(saved);
       return INITIAL_BANK_ACCOUNTS;
+    } catch {
+      return [];
     }
   });
 
   const [chequeBooks, setChequeBooks] = useState<ChequeBook[]>(() => {
     try {
       const saved = localStorage.getItem('app_cheque_books');
-      return saved ? JSON.parse(saved) : INITIAL_CHEQUE_BOOKS;
-    } catch {
+      if (saved !== null) return JSON.parse(saved);
       return INITIAL_CHEQUE_BOOKS;
+    } catch {
+      return [];
     }
   });
 
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>(() => {
     try {
       const saved = localStorage.getItem('app_beneficiaries');
-      return saved ? JSON.parse(saved) : INITIAL_BENEFICIARIES;
-    } catch {
+      if (saved !== null) return JSON.parse(saved);
       return INITIAL_BENEFICIARIES;
+    } catch {
+      return [];
     }
   });
 
   const [issuedCheques, setIssuedCheques] = useState<IssuedCheque[]>(() => {
     try {
       const saved = localStorage.getItem('app_issued_cheques');
-      return saved ? JSON.parse(saved) : INITIAL_ISSUED_CHEQUES;
-    } catch {
+      if (saved !== null) return JSON.parse(saved);
       return INITIAL_ISSUED_CHEQUES;
+    } catch {
+      return [];
     }
   });
 
@@ -110,6 +114,28 @@ export function ChequePrintingModule({
     }
     return DEFAULT_PRINT_SETTINGS;
   });
+
+  // الاستماع لحدث إعادة التعيين العام لتصفير البيانات فوراً
+  useEffect(() => {
+    const handleAppReset = (e: any) => {
+      const { selectedKeys = [], isAll = false, preserveChequeImages = true } = e.detail || {};
+      if (isAll || selectedKeys.includes('cheques')) {
+        setIssuedCheques([]);
+        setChequeBooks([]);
+      }
+      if (isAll || selectedKeys.includes('bank_accounts_beneficiaries')) {
+        if (!preserveChequeImages) {
+          setBankAccounts([]);
+        }
+        setBeneficiaries([]);
+      }
+      if (isAll || selectedKeys.includes('settings')) {
+        setPrintSettings(DEFAULT_PRINT_SETTINGS);
+      }
+    };
+    window.addEventListener('app_data_reset', handleAppReset);
+    return () => window.removeEventListener('app_data_reset', handleAppReset);
+  }, []);
 
   // مزامنة البيانات تلقائياً مع خادم وقاعدة بيانات MySQL عند فتح الصفحة
   const syncWithDatabase = useCallback(async () => {
@@ -197,12 +223,18 @@ export function ChequePrintingModule({
 
   // Navigation State
   const [internalSubTab, setInternalSubTab] = useState<string>(initialSubTab);
-  const currentSubTab = activeSubTab !== undefined ? activeSubTab : internalSubTab;
+  const rawSubTab = activeSubTab !== undefined ? activeSubTab : internalSubTab;
+  let currentSubTab = rawSubTab === 'print' ? 'issue' : (rawSubTab || 'dashboard');
+  const validSubTabs = ['dashboard', 'issue', 'ledger', 'beneficiaries', 'reports', 'calibration', 'settings'];
+  if (!validSubTabs.includes(currentSubTab)) {
+    currentSubTab = 'dashboard';
+  }
 
   const setCurrentSubTab = (tab: string) => {
-    setInternalSubTab(tab);
+    const normalized = tab === 'print' ? 'issue' : tab;
+    setInternalSubTab(normalized);
     if (onSubTabChange) {
-      onSubTabChange(tab);
+      onSubTabChange(normalized);
     }
   };
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
@@ -556,6 +588,7 @@ export function ChequePrintingModule({
           }
           printSettings={printSettings}
           companyName={companyName}
+          onUpdatePrintSettings={handleUpdatePrintSettings}
           onClose={() => setPrintingCheque(null)}
           onNavigateToCalibration={() => {
             setPrintingCheque(null);

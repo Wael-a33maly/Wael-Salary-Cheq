@@ -44,41 +44,62 @@ export default function App() {
   const [selectedReceiptMonthId, setSelectedReceiptMonthId] = useState<string | undefined>(undefined);
   const [selectedPayrollMonthId, setSelectedPayrollMonthId] = useState<string | undefined>(undefined);
 
-  // Core application state
+  // Core application state (respects empty arrays when reset)
   const [settings, setSettings] = useState<CompanySettings>(() => {
     const saved = localStorage.getItem('payroll_settings');
-    return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch { return INITIAL_SETTINGS; }
+    }
+    return INITIAL_SETTINGS;
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
     const saved = localStorage.getItem('payroll_branches');
-    return saved ? JSON.parse(saved) : INITIAL_BRANCHES;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+    return INITIAL_BRANCHES;
   });
 
   const [departments, setDepartments] = useState<Department[]>(() => {
     const saved = localStorage.getItem('payroll_departments');
-    return saved ? JSON.parse(saved) : INITIAL_DEPARTMENTS;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+    return INITIAL_DEPARTMENTS;
   });
 
   const [employees, setEmployees] = useState<Employee[]>(() => {
     const saved = localStorage.getItem('payroll_employees');
-    return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+    return INITIAL_EMPLOYEES;
   });
 
   const [users, setUsers] = useState<UserAccount[]>(() => {
     const saved = localStorage.getItem('payroll_users');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch { return INITIAL_USERS; }
+    }
+    return INITIAL_USERS;
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditRecord[]>(() => {
     const saved = localStorage.getItem('payroll_audit_logs');
-    return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+    return INITIAL_AUDIT_LOGS;
   });
 
-  // Saved monthly payrolls (cards)
+  // Saved monthly payrolls (cards) & Financial Archive
   const [savedPayrolls, setSavedPayrolls] = useState<MonthlyPayroll[]>(() => {
     const saved = localStorage.getItem('payroll_saved_months');
-    return saved ? JSON.parse(saved) : INITIAL_SAVED_PAYROLLS;
+    if (saved !== null) {
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+    return INITIAL_SAVED_PAYROLLS;
   });
 
   // Current authenticated user
@@ -87,11 +108,13 @@ export default function App() {
     username: string;
     fullName: string;
     role: string;
-  } | null>({
-    id: 1,
-    username: 'admin',
-    fullName: 'المسؤول العام للنظام',
-    role: 'admin',
+  } | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('payroll_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   // Save changes to localStorage for continuity
@@ -290,30 +313,31 @@ export default function App() {
   const handleResetData = async (selectedKeys: string[], wipeRemoteDb: boolean, preserveChequeImages = true) => {
     const isAll = selectedKeys.includes('all');
 
-    // 1. مسيرات وقسائم الرواتب
-    if (isAll || selectedKeys.includes('payrolls')) {
+    // 1. مسيرات وقسائم الرواتب والأرشيف المالي للشهور والسنوات السابقة
+    if (isAll || selectedKeys.includes('payrolls') || selectedKeys.includes('archive')) {
       setSavedPayrolls([]);
-      localStorage.removeItem('payroll_saved_months');
+      localStorage.setItem('payroll_saved_months', '[]');
+      localStorage.setItem('app_backup_archive', '[]');
     }
 
     // 2. الموظفين
     if (isAll || selectedKeys.includes('employees')) {
       setEmployees([]);
-      localStorage.removeItem('payroll_employees');
+      localStorage.setItem('payroll_employees', '[]');
     }
 
     // 3. الفروع والأقسام
     if (isAll || selectedKeys.includes('branches_departments')) {
       setBranches([]);
       setDepartments([]);
-      localStorage.removeItem('payroll_branches');
-      localStorage.removeItem('payroll_departments');
+      localStorage.setItem('payroll_branches', '[]');
+      localStorage.setItem('payroll_departments', '[]');
     }
 
     // 4. الشيكات ودفاتر الشيكات
     if (isAll || selectedKeys.includes('cheques')) {
-      localStorage.removeItem('app_issued_cheques');
-      localStorage.removeItem('app_cheque_books');
+      localStorage.setItem('app_issued_cheques', '[]');
+      localStorage.setItem('app_cheque_books', '[]');
     }
 
     // 5. الحسابات البنكية والمستفيدين
@@ -332,35 +356,42 @@ export default function App() {
           }
         } catch {}
       } else {
-        localStorage.removeItem('app_bank_accounts');
+        localStorage.setItem('app_bank_accounts', '[]');
       }
-      localStorage.removeItem('app_beneficiaries');
+      localStorage.setItem('app_beneficiaries', '[]');
     }
 
-    // 6. جلسات مطابقة البنك
+    // 6. جلسات مطابقة البنك والحركات والتسويات
     if (isAll || selectedKeys.includes('reconciliation')) {
-      localStorage.removeItem('rec_sessions');
-      localStorage.removeItem('rec_settings');
+      const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('rec_session_')) {
-          localStorage.removeItem(key);
+        if (key && (key.startsWith('app_rec_') || key.startsWith('rec_'))) {
+          keysToRemove.push(key);
         }
       }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem('app_rec_sessions', '[]');
+      localStorage.setItem('rec_sessions', '[]');
     }
 
     // 7. إعدادات المنشأة والطباعة
     if (isAll || selectedKeys.includes('settings')) {
       setSettings(INITIAL_SETTINGS);
-      localStorage.removeItem('payroll_settings');
+      localStorage.setItem('payroll_settings', JSON.stringify(INITIAL_SETTINGS));
       localStorage.removeItem('app_cheque_print_settings');
     }
 
     // 8. سجل التدقيق
     if (isAll || selectedKeys.includes('audit_logs')) {
       setAuditLogs([]);
-      localStorage.removeItem('payroll_audit_logs');
+      localStorage.setItem('payroll_audit_logs', '[]');
     }
+
+    // إشعار كافة الأجزاء التفاعلية في التطبيق بتصفير البيانات فورياً
+    window.dispatchEvent(new CustomEvent('app_data_reset', { 
+      detail: { selectedKeys, isAll, preserveChequeImages } 
+    }));
 
     // تنفيذ الحذف عن بعد في قاعدة بيانات MySQL
     let remoteResult: any = null;
@@ -644,6 +675,9 @@ export default function App() {
         settings={settings}
         onLoginSuccess={(u) => {
           setCurrentUser(u);
+          try {
+            sessionStorage.setItem('payroll_auth_user', JSON.stringify(u));
+          } catch {}
           addAuditLog('LOGIN', 'users', `تسجيل دخول ناجح للمستخدم: ${u.username}`);
         }}
         onOpenGuide={() => setIsGuideOpen(true)}
@@ -673,10 +707,13 @@ export default function App() {
         activeChequeSubTab={chequeSubTab}
         onSelectChequeSubTab={(sub) => {
           setActiveTab('cheques');
-          setChequeSubTab(sub);
+          setChequeSubTab(sub === 'print' ? 'issue' : sub);
         }}
         onLogout={() => {
           addAuditLog('LOGOUT', 'users', `تسجيل خروج للمستخدم: ${currentUser.username}`);
+          try {
+            sessionStorage.removeItem('payroll_auth_user');
+          } catch {}
           setCurrentUser(null);
         }}
       />
@@ -694,13 +731,16 @@ export default function App() {
           upcomingCheques={upcomingCheques}
           onLogout={() => {
             addAuditLog('LOGOUT', 'users', `تسجيل خروج للمستخدم: ${currentUser.username}`);
+            try {
+              sessionStorage.removeItem('payroll_auth_user');
+            } catch {}
             setCurrentUser(null);
           }}
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           onSelectReportId={(id) => setActiveReportId(id)}
           onNavigateToCheques={(sub) => {
             setActiveTab('cheques');
-            if (sub) setChequeSubTab(sub);
+            setChequeSubTab(sub === 'print' ? 'issue' : (sub || 'dashboard'));
           }}
         />
 
@@ -712,6 +752,7 @@ export default function App() {
               employees={employees}
               auditLogs={auditLogs}
               settings={settings}
+              payrolls={savedPayrolls}
               onNavigate={(tab) => setActiveTab(tab)}
             />
           )}

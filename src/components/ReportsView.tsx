@@ -238,60 +238,10 @@ export function ReportsView({
     }
   };
 
-  // Archived payrolls list (real saved ones, or default sample months if none)
+  // Archived payrolls list from actual saved monthly payrolls (empty if reset)
   const archiveList = useMemo(() => {
-    if (savedPayrolls && savedPayrolls.length > 0) {
-      return savedPayrolls;
-    }
-    return [
-      {
-        id: '2026-08',
-        year: 2026,
-        month: 8,
-        monthName: 'أغسطس 2026',
-        daysInMonth: 31,
-        voucherBaseNumber: 1200,
-        createdAt: '2026-08-31',
-        status: 'approved' as const,
-        employeeIds: employees.map((e) => e.id),
-        inputs: {},
-        totals: {
-          basic: 4850.000,
-          absenceDed: 65.250,
-          overtime: 140.500,
-          advances: 95.000,
-          net: 4830.250,
-          bank: 2815.000,
-          rawCash: 2015.250,
-          finalCash: 2015.000,
-          roundingDiff: 0.250,
-        }
-      },
-      {
-        id: '2026-07',
-        year: 2026,
-        month: 7,
-        monthName: 'يوليو 2026',
-        daysInMonth: 31,
-        voucherBaseNumber: 1050,
-        createdAt: '2026-07-31',
-        status: 'approved' as const,
-        employeeIds: employees.map((e) => e.id),
-        inputs: {},
-        totals: {
-          basic: 4850.000,
-          absenceDed: 45.000,
-          overtime: 120.000,
-          advances: 110.000,
-          net: 4815.000,
-          bank: 2815.000,
-          rawCash: 2000.000,
-          finalCash: 2000.000,
-          roundingDiff: 0.000,
-        }
-      }
-    ];
-  }, [savedPayrolls, employees]);
+    return savedPayrolls || [];
+  }, [savedPayrolls]);
 
   return (
     <div className="max-w-7xl mx-auto py-6 space-y-6">
@@ -928,65 +878,77 @@ export function ReportsView({
             </span>
           </div>
 
-          <div className="space-y-3">
-            {archiveList.map((arch) => (
-              <div
-                key={arch.id}
-                className="p-4 bg-slate-50 hover:bg-blue-50/30 transition rounded-xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-slate-900 text-sm">{arch.monthName}</span>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                      معتمد
-                    </span>
-                    <span className="text-[10px] bg-yellow-100 text-yellow-800 font-mono px-2 py-0.5 rounded border border-yellow-200 font-bold">
-                      سند ورقي: #{arch.voucherBaseNumber}
-                    </span>
-                  </div>
-                  <div className="text-slate-500 text-[11px] mt-1">
-                    تاريخ الإنشاء: {arch.createdAt} &bull; عدد الكوادر: {arch.employeeIds?.length || employees.length} موظفاً
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 block font-bold">التحويل البنكي:</span>
-                    <span className="font-mono font-bold text-slate-700">
-                      {(arch.totals?.bank || 0).toFixed(3)} د.ك
-                    </span>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-[10px] text-emerald-700 block font-bold">الصرف النقدي:</span>
-                    <span className="font-mono font-black text-emerald-950">
-                      {(arch.totals?.finalCash || 0).toFixed(3)} د.ك
-                    </span>
-                  </div>
-
-                  <div className="text-right pl-2 border-l border-slate-200">
-                    <span className="text-[10px] text-blue-700 block font-bold">صافي المسير:</span>
-                    <span className="font-mono font-black text-blue-950 text-sm">
-                      {(arch.totals?.net || 0).toFixed(3)} د.ك
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      if (onViewPayroll) {
-                        onViewPayroll(arch.id);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-xs transition active:scale-95"
-                    title="فتح هذا المسير في جدول الاحتساب والطباعة"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>استعراض المسير</span>
-                  </button>
-                </div>
+          {archiveList.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 bg-slate-50/70 rounded-2xl border border-dashed border-slate-300 space-y-3">
+              <div className="w-14 h-14 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto">
+                <Archive className="w-7 h-7 text-slate-400" />
               </div>
-            ))}
-          </div>
+              <h4 className="font-bold text-slate-700 text-sm">الأرشيف المالي فارغ حالياً</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                لا توجد مسيرات رواتب مؤرشفة لشهور أو سنوات سابقة بعد إعادة التعيين. عند اعتماد وحفظ أي مسير شهري من جدول الرواتب سيتم تسجيله وأرشفته تلقائياً هنا مع إمكانية استعراضه وطباعته في أي وقت.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {archiveList.map((arch) => (
+                <div
+                  key={arch.id}
+                  className="p-4 bg-slate-50 hover:bg-blue-50/30 transition rounded-xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 text-sm">{arch.monthName}</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                        معتمد
+                      </span>
+                      <span className="text-[10px] bg-yellow-100 text-yellow-800 font-mono px-2 py-0.5 rounded border border-yellow-200 font-bold">
+                        سند ورقي: #{arch.voucherBaseNumber}
+                      </span>
+                    </div>
+                    <div className="text-slate-500 text-[11px] mt-1">
+                      تاريخ الإنشاء: {arch.createdAt} &bull; عدد الكوادر: {arch.employeeIds?.length || employees.length} موظفاً
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 block font-bold">التحويل البنكي:</span>
+                      <span className="font-mono font-bold text-slate-700">
+                        {(arch.totals?.bank || 0).toFixed(3)} د.ك
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-emerald-700 block font-bold">الصرف النقدي:</span>
+                      <span className="font-mono font-black text-emerald-950">
+                        {(arch.totals?.finalCash || 0).toFixed(3)} د.ك
+                      </span>
+                    </div>
+
+                    <div className="text-right pl-2 border-l border-slate-200">
+                      <span className="text-[10px] text-blue-700 block font-bold">صافي المسير:</span>
+                      <span className="font-mono font-black text-blue-950 text-sm">
+                        {(arch.totals?.net || 0).toFixed(3)} د.ك
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (onViewPayroll) {
+                          onViewPayroll(arch.id);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-xs transition active:scale-95"
+                      title="فتح هذا المسير في جدول الاحتساب والطباعة"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>استعراض المسير</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -65,8 +65,9 @@ export function ChequesLedger({
       // Search query (cheque number, beneficiary, purpose)
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
-        const matchSerial = c.chequeNumberStr.toLowerCase().includes(query) || String(c.chequeNumber).includes(query);
-        const matchName = c.beneficiaryName.toLowerCase().includes(query);
+        const chkStr = (c.chequeNumberStr || String(c.chequeNumber || '')).toLowerCase();
+        const matchSerial = chkStr.includes(query) || String(c.chequeNumber || '').includes(query);
+        const matchName = (c.beneficiaryName || '').toLowerCase().includes(query);
         const matchPurpose = c.purpose ? c.purpose.toLowerCase().includes(query) : false;
         if (!matchSerial && !matchName && !matchPurpose) {
           return false;
@@ -78,9 +79,9 @@ export function ChequesLedger({
 
   // Calculations for filtered set
   const totalCount = filteredCheques.length;
-  const totalAmount = filteredCheques.reduce((s, c) => s + c.amount, 0);
-  const cashedAmount = filteredCheques.filter((c) => c.status === 'cashed').reduce((s, c) => s + c.amount, 0);
-  const pendingAmount = filteredCheques.filter((c) => c.status === 'issued').reduce((s, c) => s + c.amount, 0);
+  const totalAmount = filteredCheques.reduce((s, c) => s + (c.amount || 0), 0);
+  const cashedAmount = filteredCheques.filter((c) => c.status === 'cashed').reduce((s, c) => s + (c.amount || 0), 0);
+  const pendingAmount = filteredCheques.filter((c) => c.status === 'issued').reduce((s, c) => s + (c.amount || 0), 0);
 
   // Export to CSV
   const handleExportCSV = () => {
@@ -89,12 +90,12 @@ export function ChequesLedger({
       const acc = bankAccounts.find((a) => a.id === c.bankAccountId);
       const statusLabel = c.status === 'cashed' ? 'منصرف' : c.status === 'issued' ? 'صادر (معلق)' : 'ملغى';
       return [
-        `"${c.chequeNumberStr}"`,
+        `"${c.chequeNumberStr || c.chequeNumber || ''}"`,
         `"${acc?.accountName || acc?.bankName || ''}"`,
-        `"${c.beneficiaryName}"`,
-        c.amount.toFixed(3),
-        c.issueDate,
-        c.dueDate,
+        `"${c.beneficiaryName || ''}"`,
+        (c.amount || 0).toFixed(3),
+        c.issueDate || '',
+        c.dueDate || '',
         statusLabel,
         c.cashedDate || '',
         `"${c.purpose || ''}"`,

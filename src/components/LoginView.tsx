@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Lock, User, ShieldCheck, AlertCircle, Building2, Key } from 'lucide-react';
+import { Lock, User, ShieldCheck, AlertCircle, Building2, Key, Loader2 } from 'lucide-react';
 import { CompanySettings } from '../types';
+import { dbService } from '../services/apiService';
 
 interface LoginViewProps {
   settings: CompanySettings;
@@ -12,32 +13,38 @@ export function LoginView({ settings, onLoginSuccess, onOpenGuide }: LoginViewPr
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('Admin@2026!');
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [attempts, setAttempts] = useState(0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (attempts >= 5) {
-      setError('تم قفل الحساب مؤقتاً لمدة 15 دقيقة لتجاوز 5 محاولات خاطئة (Rate Limiting).');
+      setError('تم قفل الحساب مؤقتاً لتجاوز 5 محاولات خاطئة (Rate Limiting).');
       return;
     }
 
-    if (username === 'admin' && (password === 'Admin@2026!' || password.length >= 6)) {
-      onLoginSuccess({
-        id: 1,
-        username: 'admin',
-        fullName: 'المسؤول العام للنظام',
-        role: 'admin',
-      });
-    } else if (username === 'accountant' || username === 'accountant_kw') {
-      onLoginSuccess({
-        id: 2,
-        username: 'accountant_kw',
-        fullName: 'أحمد المحاسب المالي',
-        role: 'accountant',
-      });
-    } else {
+    const trimmedUser = username.trim();
+    if (!trimmedUser || !password) {
+      setError('يرجى إدخال اسم المستخدم وكلمة المرور');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await dbService.login(trimmedUser, password);
+      if (res.success && res.user) {
+        onLoginSuccess(res.user);
+      } else {
+        setAttempts((prev) => prev + 1);
+        setError(res.error || `اسم المستخدم أو كلمة المرور غير صحيحة. المحاولة ${attempts + 1} من 5.`);
+      }
+    } catch {
       setAttempts((prev) => prev + 1);
-      setError(`بيانات الدخول غير صحيحة. المحاولة ${attempts + 1} من 5.`);
+      setError(`تعذر التحقق من بيانات الدخول. المحاولة ${attempts + 1} من 5.`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -99,10 +106,20 @@ export function LoginView({ settings, onLoginSuccess, onOpenGuide }: LoginViewPr
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl text-xs shadow-lg shadow-blue-500/30 transition active:scale-95 flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white font-black rounded-xl text-xs shadow-lg shadow-blue-500/30 transition active:scale-95 flex items-center justify-center gap-2"
             >
-              <Key className="w-4 h-4" />
-              <span>تسجيل الدخول للنظام (login.php)</span>
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>جاري التحقق من كلمة المرور...</span>
+                </>
+              ) : (
+                <>
+                  <Key className="w-4 h-4" />
+                  <span>تسجيل الدخول للنظام</span>
+                </>
+              )}
             </button>
           </div>
 

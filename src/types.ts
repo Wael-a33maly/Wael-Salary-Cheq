@@ -158,6 +158,17 @@ export interface ChequePrintSettings {
   payeeFontSize?: number;
   wordsFontSize?: number;
   amountFontSize?: number;
+  // محاذاة النص داخل الحقول (يمين، وسط، يسار)
+  dateAlign?: 'right' | 'center' | 'left';
+  payeeAlign?: 'right' | 'center' | 'left';
+  wordsAlign?: 'right' | 'center' | 'left';
+  amountAlign?: 'right' | 'center' | 'left';
+  // خيارات تلقيم الشيك في الطابعة (أفقي بالعرض 18 سم أو رأسي بالطول من جهة الـ 9 سم)
+  feedOrientation?: 'landscape' | 'portrait_90' | 'portrait_270';
+  feedAlignment?: 'center' | 'right' | 'left'; // محاذاة الشيك في درج الطابعة (منتصف لـ HP Laser 107w، يسار، يمين)
+  paperType?: 'a4_feed' | 'custom_cheque_size'; // A4 مع محاذاة في الدرج (لطابعات الليزر المكتبية مثل HP Laser 107w) أو مقاس الشيك المخصص
+  trayOffsetX?: number; // إزاحة الدرج الأفقية الإضافية بالملليمتر
+  trayOffsetY?: number; // إزاحة الدرج الرأسية الإضافية بالملليمتر
 }
 
 export interface BeneficiaryCategory {

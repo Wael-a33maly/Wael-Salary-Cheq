@@ -339,6 +339,15 @@ CREATE TABLE IF NOT EXISTS `cheque_print_settings` (
   `payee_font_size` INT DEFAULT 14,
   `words_font_size` INT DEFAULT 12,
   `amount_font_size` INT DEFAULT 15,
+  `date_align` VARCHAR(10) DEFAULT 'center' COMMENT 'محاذاة التاريخ: right, center, left',
+  `payee_align` VARCHAR(10) DEFAULT 'right' COMMENT 'محاذاة اسم المستفيد: right, center, left',
+  `words_align` VARCHAR(10) DEFAULT 'right' COMMENT 'محاذاة التفقيط: right, center, left',
+  `amount_align` VARCHAR(10) DEFAULT 'center' COMMENT 'محاذاة المبلغ بالأرقام: right, center, left',
+  `feed_orientation` VARCHAR(30) DEFAULT 'portrait_90' COMMENT 'اتجاه التلقيم: landscape أو portrait_90 أو portrait_270',
+  `feed_alignment` VARCHAR(30) DEFAULT 'center' COMMENT 'محاذاة الدرج: center, right, left',
+  `paper_type` VARCHAR(30) DEFAULT 'a4_feed' COMMENT 'نوع الورق: a4_feed أو custom_cheque_size',
+  `tray_offset_x` DECIMAL(6,2) DEFAULT 0.00 COMMENT 'إزاحة أفقية إضافية للدرج',
+  `tray_offset_y` DECIMAL(6,2) DEFAULT 0.00 COMMENT 'إزاحة رأسية إضافية للدرج',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

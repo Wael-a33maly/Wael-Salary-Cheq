@@ -46,10 +46,31 @@ export function ChequesDashboard({
   onPrintCheque,
   onPrintReceiptOrEnvelope,
   onStatusChange,
+  onOpenSettings,
 }: ChequesDashboardProps) {
+  // Fallback safe bank account when no accounts exist (after reset)
+  const fallbackAccount: BankAccount = {
+    id: 'acc-default',
+    accountName: 'الحساب الرئيسي للمنشأة',
+    bankName: 'البنك التجاري الكويتي (CBK)',
+    bankCode: 'CBK',
+    accountNumber: '1020491823',
+    iban: 'KW18CBKU000000001020491823',
+    branchName: 'الفرع الرئيسي',
+    currency: 'د.ك',
+    currentBalance: 0,
+    isDefault: true,
+    status: 'active',
+    chequeTemplate: 'CBK',
+    chequeWidthCm: 18.0,
+    chequeHeightCm: 9.0,
+  };
+
   // Filter data by selected account (or all)
   const isAllAccounts = selectedAccountId === 'all';
-  const activeAccount = bankAccounts.find((a) => a.id === selectedAccountId) || bankAccounts[0];
+  const activeAccount = (selectedAccountId !== 'all' && bankAccounts.find((a) => a.id === selectedAccountId)) 
+    || bankAccounts[0] 
+    || fallbackAccount;
 
   const relevantCheques = isAllAccounts
     ? issuedCheques
@@ -61,32 +82,58 @@ export function ChequesDashboard({
 
   // Totals calculations in KWD
   const totalIssuedCount = relevantCheques.length;
-  const totalIssuedAmount = relevantCheques.reduce((s, c) => s + c.amount, 0);
+  const totalIssuedAmount = relevantCheques.reduce((s, c) => s + (c.amount || 0), 0);
 
   const cashedCheques = relevantCheques.filter((c) => c.status === 'cashed');
-  const cashedAmount = cashedCheques.reduce((s, c) => s + c.amount, 0);
+  const cashedAmount = cashedCheques.reduce((s, c) => s + (c.amount || 0), 0);
 
   const pendingCheques = relevantCheques.filter((c) => c.status === 'issued'); // لم تصرف
-  const pendingAmount = pendingCheques.reduce((s, c) => s + c.amount, 0);
+  const pendingAmount = pendingCheques.reduce((s, c) => s + (c.amount || 0), 0);
 
   const cancelledCheques = relevantCheques.filter((c) => c.status === 'cancelled');
-  const cancelledAmount = cancelledCheques.reduce((s, c) => s + c.amount, 0);
+  const cancelledAmount = cancelledCheques.reduce((s, c) => s + (c.amount || 0), 0);
 
   // Active book for the selected account
   const activeBook = relevantBooks.find((b) => b.status === 'active') || relevantBooks[0];
   const usedLeaves = activeBook
     ? issuedCheques.filter((c) => c.chequeBookId === activeBook.id).length
     : 0;
-  const remainingLeaves = activeBook ? Math.max(0, activeBook.totalLeaves - usedLeaves) : 0;
-  const usagePercentage = activeBook ? Math.round((usedLeaves / activeBook.totalLeaves) * 100) : 0;
+  const remainingLeaves = activeBook ? Math.max(0, (activeBook.totalLeaves || 0) - usedLeaves) : 0;
+  const usagePercentage = activeBook && activeBook.totalLeaves ? Math.round((usedLeaves / activeBook.totalLeaves) * 100) : 0;
 
   // Recent cheques
   const recentCheques = [...relevantCheques]
-    .sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime())
+    .sort((a, b) => new Date(b.issueDate || 0).getTime() - new Date(a.issueDate || 0).getTime())
     .slice(0, 6);
 
   return (
     <div className="space-y-6">
+
+      {/* تنبيه عند فراغ الحسابات البنكية بعد تصفير البيانات */}
+      {bankAccounts.length === 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-900 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-200/70 flex items-center justify-center text-amber-800 shrink-0">
+              <Landmark className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-black text-sm">تم تصفير الحسابات البنكية ودفاتر الشيكات</h4>
+              <p className="text-xs text-amber-800/80 mt-0.5">
+                يمكنك التوجه لشاشة إعدادات الدفاتر لإضافة حسابك البنكي أو دفتر الشيكات للبدء بإصدار الشيكات فورياً.
+              </p>
+            </div>
+          </div>
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={() => onOpenSettings()}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition shadow-sm shrink-0"
+            >
+              إضافة حساب بنكي ودفتر شيكات
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Account Selector Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -393,17 +440,17 @@ export function ChequesDashboard({
                 return (
                   <tr key={c.id} className="hover:bg-slate-50/80 transition">
                     <td className="p-3 font-mono font-black text-slate-900 bg-slate-50/50">
-                      #{c.chequeNumberStr}
+                      #{c.chequeNumberStr || c.chequeNumber || ''}
                     </td>
-                    <td className="p-3 font-bold text-slate-900">{c.beneficiaryName}</td>
+                    <td className="p-3 font-bold text-slate-900">{c.beneficiaryName || ''}</td>
                     <td className="p-3 text-slate-600 text-[11px]">
                       {acc?.bankName || 'البنك'}
                     </td>
                     <td className="p-3 text-center font-mono font-black text-slate-900 text-sm">
-                      {c.amount.toFixed(3)}
+                      {(c.amount || 0).toFixed(3)}
                     </td>
-                    <td className="p-3 text-center font-mono text-slate-600">{c.issueDate}</td>
-                    <td className="p-3 text-center font-mono text-slate-600">{c.dueDate}</td>
+                    <td className="p-3 text-center font-mono text-slate-600">{c.issueDate || ''}</td>
+                    <td className="p-3 text-center font-mono text-slate-600">{c.dueDate || ''}</td>
                     <td className="p-3 text-center">
                       {c.status === 'cashed' && (
                         <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px]">
