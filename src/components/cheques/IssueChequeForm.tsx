@@ -703,7 +703,8 @@ export function IssueChequeForm({
 
               {/* 1. حقل التاريخ DATE */}
               <div 
-                className="absolute flex items-center font-mono font-black text-slate-950 tracking-widest z-10 overflow-hidden"
+                className="absolute flex items-center font-mono font-black text-slate-950 tracking-normal z-10 overflow-hidden"
+                dir="ltr"
                 style={{
                   left: `${(previewDateLeft / currentWidthMm) * 100}%`,
                   top: `${(previewDateTop / currentHeightMm) * 100}%`,
@@ -715,8 +716,9 @@ export function IssueChequeForm({
                 title="التاريخ"
               >
                 <span 
-                  style={{ textAlign: previewDateAlign }}
-                  className={`w-full h-full flex items-center font-black font-mono tracking-widest truncate select-none px-0.5 ${
+                  style={{ textAlign: previewDateAlign, direction: 'ltr', unicodeBidi: 'isolate' }}
+                  dir="ltr"
+                  className={`w-full h-full flex items-center font-black font-mono tracking-normal truncate select-none px-0.5 ${
                     previewDateAlign === 'right' ? 'justify-end text-right' : previewDateAlign === 'left' ? 'justify-start text-left' : 'justify-center text-center'
                   }`}
                 >

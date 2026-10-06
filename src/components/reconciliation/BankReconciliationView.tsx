@@ -29,7 +29,11 @@ import {
   Layers,
   ChevronDown,
   Database,
-  Plus
+  Plus,
+  CreditCard,
+  Receipt,
+  Calendar,
+  BarChart3
 } from 'lucide-react';
 import {
   BankStatementTransaction,
@@ -49,7 +53,11 @@ import {
   INITIAL_ACCOUNTING_TRANSACTIONS,
   SAMPLE_BANK_STATEMENT_TRANSACTIONS
 } from '../../mockReconciliation';
-import { executeReconciliationEngine, calculateReconciliationSummary } from '../../utils/reconciliationEngine';
+import {
+  executeReconciliationEngine,
+  calculateReconciliationSummary,
+  buildMonthlyDifferencesBreakdown
+} from '../../utils/reconciliationEngine';
 import {
   exportReconciliationToExcel,
   triggerPrintReconciliationReport,
@@ -309,8 +317,48 @@ export function BankReconciliationView({
   }, [activeSessionId]);
 
   const [diffFilterStatus, setDiffFilterStatus] = useState<string>('all');
+  const [diffCategoryFilter, setDiffCategoryFilter] = useState<'all' | 'knet_commission' | 'knet_rent' | 'cheques' | 'deposits' | 'bank_fees'>('all');
   const [diffSearchQuery, setDiffSearchQuery] = useState<string>('');
-  const [mainViewSubTab, setMainViewSubTab] = useState<'all' | 'differences' | 'matched' | 'import_center' | 'statement' | 'report'>('all');
+  const [mainViewSubTab, setMainViewSubTab] = useState<'all' | 'differences' | 'knet_breakdown' | 'matched' | 'statement' | 'report'>('all');
+
+  // التجميع والتحليل الشهري الشامل ومصفوفة أجهزة الكي نت
+  const monthlyBreakdowns = useMemo(() => {
+    return buildMonthlyDifferencesBreakdown(differences);
+  }, [differences]);
+
+  // تصنيفات الفروقات المستقلة
+  const knetDiffs = useMemo(() => differences.filter((d) => d.differenceType === 'knet_commission'), [differences]);
+  const knetRentDiffs = useMemo(() => differences.filter((d) => d.differenceType === 'knet_rental_fee'), [differences]);
+  const chequeDiffs = useMemo(() => differences.filter((d) => d.categoryGroup === 'cheques' || d.differenceType === 'cheque_diff' || d.differenceType === 'unpresented_cheque'), [differences]);
+  const depositDiffs = useMemo(() => differences.filter((d) => d.categoryGroup === 'deposits' || d.differenceType === 'deposit_diff' || d.differenceType === 'uncredited_deposit'), [differences]);
+  const feeDiffs = useMemo(() => differences.filter((d) => d.differenceType === 'bank_fee'), [differences]);
+
+  // إدارة وتصفية أجهزة الكي نت المتعددة (Multi-Terminal POS Devices)
+  const [selectedTerminalFilter, setSelectedTerminalFilter] = useState<string>('all');
+
+  const availableTerminalIds = useMemo(() => {
+    const set = new Set<string>();
+    bankTransactions.forEach((b) => { if (b.terminalId) set.add(b.terminalId); });
+    accountingTransactions.forEach((a) => { if (a.terminalId) set.add(a.terminalId); });
+    differences.forEach((d) => { if (d.terminalId) set.add(d.terminalId); });
+    return Array.from(set).filter(Boolean).sort();
+  }, [bankTransactions, accountingTransactions, differences]);
+
+  const filteredKnetDiffs = useMemo(() => {
+    if (selectedTerminalFilter === 'all') return knetDiffs;
+    return knetDiffs.filter((d) => d.terminalId === selectedTerminalFilter);
+  }, [knetDiffs, selectedTerminalFilter]);
+
+  const filteredKnetRentDiffs = useMemo(() => {
+    if (selectedTerminalFilter === 'all') return knetRentDiffs;
+    return knetRentDiffs.filter((d) => d.terminalId === selectedTerminalFilter);
+  }, [knetRentDiffs, selectedTerminalFilter]);
+
+  const knetCommissionTotal = useMemo(() => filteredKnetDiffs.reduce((sum, d) => sum + d.differenceValue, 0), [filteredKnetDiffs]);
+  const knetRentTotal = useMemo(() => filteredKnetRentDiffs.reduce((sum, d) => sum + d.differenceValue, 0), [filteredKnetRentDiffs]);
+  const chequeDiffTotal = useMemo(() => chequeDiffs.reduce((sum, d) => sum + d.differenceValue, 0), [chequeDiffs]);
+  const depositDiffTotal = useMemo(() => depositDiffs.reduce((sum, d) => sum + d.differenceValue, 0), [depositDiffs]);
+  const bankFeesTotalVal = useMemo(() => feeDiffs.reduce((sum, d) => sum + d.differenceValue, 0), [feeDiffs]);
 
   // مزامنة البيانات تلقائياً مع خادم وقاعدة بيانات MySQL عند فتح الصفحة أو تبديل الجلسة
   const syncWithDatabase = useCallback(async () => {
@@ -1239,6 +1287,23 @@ export function BankReconciliationView({
           </button>
 
           <button
+            onClick={() => setMainViewSubTab('knet_breakdown')}
+            className={`px-4 py-2 text-xs font-bold rounded-t-xl transition flex items-center gap-1.5 ${
+              mainViewSubTab === 'knet_breakdown'
+                ? 'bg-white text-indigo-700 border-t-2 border-r border-l border-indigo-600 -mb-px shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+            <span>التحليل والتجميع الشهري ومبيعات الكي نت</span>
+            {monthlyBreakdowns.length > 0 && (
+              <span className="bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                {monthlyBreakdowns.length} شهر
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setMainViewSubTab('matched')}
             className={`px-4 py-2 text-xs font-bold rounded-t-xl transition flex items-center gap-1.5 ${
               mainViewSubTab === 'matched'
@@ -1409,9 +1474,107 @@ export function BankReconciliationView({
                   تم استخراج {differences.length} فروقات تلقائياً بواسطة المحرك الذكي (بدون اشتراط سقف أو حد مسبق)
                 </span>
                 <p className="text-emerald-800 text-[11px] leading-relaxed">
-                  يقوم المحرك الذكي باكتشاف كافة الفروقات الصغيرة (مثل عمولات نقاط البيع KNET وفروقات الفلس) والفروقات المحاسبية الكبيرة تلقائياً. يمكنك بنقرة زر واحدة إقفال أي فرق مباشرة كعمولة أو إنشاء قيد تسوية.
+                  يقوم المحرك الذكي بمقارنة الأرقام واستخراج كافة فروقات الشيكات، عمولات إيداعات أجهزة الكي نت، إيجار أجهزة الكي نت (15 د.ك)، وفروقات الإيداعات تلقائياً مع تفصيلها لكل جهاز وشيك.
                 </p>
               </div>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDiffCategoryFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                  diffCategoryFilter === 'all'
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <span>كافة الفروقات</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${diffCategoryFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                  {differences.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiffCategoryFilter('knet_commission')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                  diffCategoryFilter === 'knet_commission'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-50'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>عمولات أجهزة كي نت</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${diffCategoryFilter === 'knet_commission' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                  {knetDiffs.length} ({knetCommissionTotal.toFixed(3)} د.ك)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiffCategoryFilter('knet_rent')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                  diffCategoryFilter === 'knet_rent'
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                    : 'bg-white text-purple-800 border-purple-200 hover:bg-purple-50'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>إيجار أجهزة كي نت (15 د.ك)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${diffCategoryFilter === 'knet_rent' ? 'bg-purple-700 text-white' : 'bg-purple-100 text-purple-800'}`}>
+                  {knetRentDiffs.length} ({knetRentTotal.toFixed(3)} د.ك)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiffCategoryFilter('cheques')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                  diffCategoryFilter === 'cheques'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : 'bg-white text-amber-800 border-amber-200 hover:bg-amber-50'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>فروقات الشيكات والمعلق</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${diffCategoryFilter === 'cheques' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-800'}`}>
+                  {chequeDiffs.length} ({chequeDiffTotal.toFixed(3)} د.ك)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiffCategoryFilter('deposits')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                  diffCategoryFilter === 'deposits'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-50'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>فروقات الإيداعات والتحويلات</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${diffCategoryFilter === 'deposits' ? 'bg-blue-700 text-white' : 'bg-blue-100 text-blue-800'}`}>
+                  {depositDiffs.length} ({depositDiffTotal.toFixed(3)} د.ك)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiffCategoryFilter('bank_fees')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                  diffCategoryFilter === 'bank_fees'
+                    ? 'bg-slate-700 text-white border-slate-700 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <Percent className="w-3.5 h-3.5" />
+                <span>مصاريف ورسوم بنكية</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${diffCategoryFilter === 'bank_fees' ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                  {feeDiffs.length} ({bankFeesTotalVal.toFixed(3)} د.ك)
+                </span>
+              </button>
             </div>
 
             {/* Filter Bar */}
@@ -1420,22 +1583,22 @@ export function BankReconciliationView({
                 <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
                 <input
                   type="text"
-                  placeholder="بحث برقم المرجع، البيان، المبلغ..."
+                  placeholder="بحث برقم المرجع، رقم الجهاز، رقم الشيك، البيان..."
                   value={diffSearchQuery}
                   onChange={(e) => setDiffSearchQuery(e.target.value)}
-                  className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 w-full sm:w-64"
+                  className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 w-full sm:w-80"
                 />
               </div>
 
               <div className="flex items-center gap-2">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-xs text-slate-600 font-bold">تصفية:</span>
+                <span className="text-xs text-slate-600 font-bold">الحالة:</span>
                 <select
                   value={diffFilterStatus}
                   onChange={(e) => setDiffFilterStatus(e.target.value)}
                   className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="all">كافة الفروقات</option>
+                  <option value="all">كافة الحالات</option>
                   <option value="pending">معلقة وتحتاج معالجة</option>
                   <option value="closed_as_fee">تم إقفالها كعمولة</option>
                   <option value="resolved">تمت التسوية بنجاح</option>
@@ -1450,7 +1613,7 @@ export function BankReconciliationView({
                   <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                     <tr>
                       <th className="p-3">التاريخ</th>
-                      <th className="p-3">المرجع</th>
+                      <th className="p-3">المرجع والتصنيف</th>
                       <th className="p-3">البيان والسبب المستخرج</th>
                       <th className="p-3 text-center">مبلغ البنك</th>
                       <th className="p-3 text-center">مبلغ المحاسبة</th>
@@ -1460,21 +1623,74 @@ export function BankReconciliationView({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
-                    {differences.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-500 font-sans">
-                          لا توجد فروقات مسجلة حالياً. اضغط على زر &quot;بدء المطابقة الآلية الذكية&quot; لاكتشاف واستخراج الفروقات.
-                        </td>
-                      </tr>
-                    ) : (
-                      differences.map((d) => {
+                    {(() => {
+                      const filtered = differences.filter((d) => {
+                        // Category filter
+                        if (diffCategoryFilter === 'knet_commission' && d.differenceType !== 'knet_commission') return false;
+                        if (diffCategoryFilter === 'knet_rent' && d.differenceType !== 'knet_rental_fee') return false;
+                        if (diffCategoryFilter === 'cheques' && d.categoryGroup !== 'cheques' && d.differenceType !== 'cheque_diff' && d.differenceType !== 'unpresented_cheque') return false;
+                        if (diffCategoryFilter === 'deposits' && d.categoryGroup !== 'deposits' && d.differenceType !== 'deposit_diff' && d.differenceType !== 'uncredited_deposit') return false;
+                        if (diffCategoryFilter === 'bank_fees' && d.differenceType !== 'bank_fee') return false;
+
+                        // Status filter
+                        if (diffFilterStatus !== 'all' && d.processingStatus !== diffFilterStatus) return false;
+
+                        // Search query
+                        if (diffSearchQuery) {
+                          const q = diffSearchQuery.toLowerCase();
+                          const matches =
+                            (d.referenceNumber && d.referenceNumber.toLowerCase().includes(q)) ||
+                            (d.description && d.description.toLowerCase().includes(q)) ||
+                            (d.cause && d.cause.toLowerCase().includes(q)) ||
+                            (d.terminalId && d.terminalId.toLowerCase().includes(q)) ||
+                            (d.chequeNumber && d.chequeNumber.toLowerCase().includes(q)) ||
+                            d.differenceValue.toString().includes(q);
+                          if (!matches) return false;
+                        }
+
+                        return true;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={8} className="p-8 text-center text-slate-500 font-sans">
+                              لا توجد فروقات مطابقة للمعايير المحددة.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map((d) => {
                         return (
                           <tr key={d.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-3 font-sans font-bold text-slate-800">{d.transactionDate}</td>
-                            <td className="p-3 text-emerald-700 font-semibold">{d.referenceNumber}</td>
+                            <td className="p-3">
+                              <span className="text-emerald-700 font-semibold block">{d.referenceNumber}</span>
+                              {d.terminalId && (
+                                <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold font-sans">
+                                  جهاز كي نت: {d.terminalId}
+                                </span>
+                              )}
+                              {d.chequeNumber && (
+                                <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold font-sans">
+                                  شيك رقم #{d.chequeNumber}
+                                </span>
+                              )}
+                              {d.differenceType === 'knet_rental_fee' && (
+                                <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 text-[10px] font-bold font-sans">
+                                  إيجار جهاز 15 د.ك
+                                </span>
+                              )}
+                            </td>
                             <td className="p-3 font-sans text-slate-700 max-w-xs">
                               <span className="font-bold block text-slate-900">{d.description}</span>
                               <span className="text-[11px] text-slate-500">{d.cause}</span>
+                              {d.commissionRate !== undefined && d.commissionRate > 0 && (
+                                <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">
+                                  معدل العمولة المستقطعة: {d.commissionRate}%
+                                </span>
+                              )}
                             </td>
                             <td className="p-3 text-center text-slate-800 font-bold">{d.bankAmount.toFixed(3)}</td>
                             <td className="p-3 text-center text-slate-800 font-bold">{d.accountingAmount.toFixed(3)}</td>
@@ -1498,8 +1714,6 @@ export function BankReconciliationView({
                             </td>
                             <td className="p-3 text-center font-sans">
                               <div className="flex items-center justify-center gap-1.5">
-                                
-                                {/* Quick Close directly without threshold gating! */}
                                 {d.processingStatus === 'pending' && (
                                   <button
                                     onClick={() => handleQuickCloseFee(d)}
@@ -1512,7 +1726,6 @@ export function BankReconciliationView({
                                   </button>
                                 )}
 
-                                {/* Create General Journal Entry */}
                                 <button
                                   onClick={() => {
                                     setActiveDiffForJournal(d);
@@ -1529,11 +1742,452 @@ export function BankReconciliationView({
                             </td>
                           </tr>
                         );
-                      })
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* CONTENT 2.5: K-NET BREAKDOWN & MONTHLY AGGREGATION TAB */}
+        {mainViewSubTab === 'knet_breakdown' && (
+          <div className="p-5 space-y-6">
+            
+            {/* Header Banner */}
+            <div className="bg-linear-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm border border-indigo-800">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <CreditCard className="w-5 h-5 text-indigo-400" />
+                    <h3 className="text-base font-black">
+                      التحليل والتجميع الشهري الشامل ومبيعات أجهزة الكي نت (K-Net POS Analytics)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-indigo-200 leading-relaxed max-w-3xl">
+                    مقارنة ذكية بين إيداعات البنك ومبيعات الدفاتر، واستخراج الفروقات والعمولات المخصومة عن كل حركة، واحتساب إيجار كل جهاز (15 د.ك شهرياً)، مع التجميع والتفصيل الكامل لكل شهر برقم كل جهاز كي نت.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      exportReconciliationToExcel(
+                        activeSession,
+                        summary,
+                        bankTransactions,
+                        accountingTransactions,
+                        differences
+                      );
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>تصدير تقرير أجهزة الكي نت (Excel)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Financial Metric Boxes */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-indigo-800/60 font-mono">
+                <div className="bg-indigo-950/60 p-3 rounded-xl border border-indigo-700/50">
+                  <span className="text-[10px] text-indigo-300 block font-sans">إجمالي عمولات كي نت المخصومة:</span>
+                  <div className="text-base font-black text-emerald-400 mt-0.5">
+                    {knetCommissionTotal.toFixed(3)} <span className="text-[10px] text-slate-300 font-sans">د.ك</span>
+                  </div>
+                  <span className="text-[10px] text-indigo-300 font-sans block mt-0.5">
+                    {filteredKnetDiffs.length} حركة تسوية {selectedTerminalFilter !== 'all' ? `(جهاز ${selectedTerminalFilter})` : 'لكافة الأجهزة'}
+                  </span>
+                </div>
+
+                <div className="bg-indigo-950/60 p-3 rounded-xl border border-indigo-700/50">
+                  <span className="text-[10px] text-indigo-300 block font-sans">مصروف إيجار أجهزة كي نت (15 د.ك):</span>
+                  <div className="text-base font-black text-purple-400 mt-0.5">
+                    {knetRentTotal.toFixed(3)} <span className="text-[10px] text-slate-300 font-sans">د.ك</span>
+                  </div>
+                  <span className="text-[10px] text-indigo-300 font-sans block mt-0.5">
+                    {filteredKnetRentDiffs.length} جهاز بمعدل 15 د.ك/شهرياً
+                  </span>
+                </div>
+
+                <div className="bg-indigo-950/60 p-3 rounded-xl border border-indigo-700/50">
+                  <span className="text-[10px] text-indigo-300 block font-sans">فروقات الشيكات والمعلق:</span>
+                  <div className="text-base font-black text-amber-400 mt-0.5">
+                    {chequeDiffTotal.toFixed(3)} <span className="text-[10px] text-slate-300 font-sans">د.ك</span>
+                  </div>
+                  <span className="text-[10px] text-indigo-300 font-sans block mt-0.5">
+                    {chequeDiffs.length} شيك مسجل
+                  </span>
+                </div>
+
+                <div className="bg-indigo-950/60 p-3 rounded-xl border border-indigo-700/50">
+                  <span className="text-[10px] text-indigo-300 block font-sans">فروقات الإيداعات والتحويلات:</span>
+                  <div className="text-base font-black text-blue-400 mt-0.5">
+                    {depositDiffTotal.toFixed(3)} <span className="text-[10px] text-slate-300 font-sans">د.ك</span>
+                  </div>
+                  <span className="text-[10px] text-indigo-300 font-sans block mt-0.5">
+                    {depositDiffs.length} حركة إيداع
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Multiple K-Net Terminals Filter Toolbar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-indigo-50/80 p-3.5 rounded-xl border border-indigo-200 shadow-2xs">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <CreditCard className="w-4 h-4 text-indigo-700 shrink-0" />
+                <span className="text-xs font-bold text-slate-800 shrink-0">تصفية حسب جهاز الكي نت (TID):</span>
+                <select
+                  value={selectedTerminalFilter}
+                  onChange={(e) => setSelectedTerminalFilter(e.target.value)}
+                  className="bg-white border border-indigo-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto"
+                >
+                  <option value="all">كافة أجهزة الكي نت ({availableTerminalIds.length > 0 ? `${availableTerminalIds.length} أجهزة` : 'الكل'})</option>
+                  {availableTerminalIds.map((tid) => (
+                    <option key={tid} value={tid}>
+                      جهاز رقم: {tid}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedTerminalFilter !== 'all' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded-lg font-bold border border-indigo-200">
+                    معروض الآن: جهاز #{selectedTerminalFilter}
+                  </span>
+                  <button
+                    onClick={() => setSelectedTerminalFilter('all')}
+                    className="text-xs text-indigo-700 hover:text-indigo-900 font-bold underline cursor-pointer"
+                  >
+                    عرض كافة الأجهزة
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 1: K-NET POS TERMINAL MONTHLY SUMMARIES */}
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs bg-white">
+              <div className="bg-slate-100/90 px-4 py-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-700" />
+                  <h4 className="text-xs font-black text-slate-900">
+                    جدول التجميع الشهري ومبيعات كل جهاز كي نت برقم الجهاز (K-Net POS Monthly Terminal Summary)
+                  </h4>
+                </div>
+                <span className="text-[11px] text-slate-500 font-sans">
+                  مفصل لكل شهر مع استخراج عمولات كل حركة وإيجار الجهاز (15 د.ك)
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs font-mono">
+                  <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 font-sans">
+                    <tr>
+                      <th className="p-3">الشهر</th>
+                      <th className="p-3">رقم جهاز الكي نت (TID)</th>
+                      <th className="p-3 text-center">إجمالي مبيعات الدفاتر</th>
+                      <th className="p-3 text-center">إجمالي المحصل بالبنك</th>
+                      <th className="p-3 text-center text-emerald-700">عمولات كي نت المخصومة</th>
+                      <th className="p-3 text-center text-purple-700">إيجار الجهاز (15 د.ك)</th>
+                      <th className="p-3 text-center text-red-600">إجمالي الاستقطاعات</th>
+                      <th className="p-3 text-center">عدد الحركات</th>
+                      <th className="p-3 text-center">متوسط نسبة العمولة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {monthlyBreakdowns
+                      .flatMap((mb) => mb.terminalSummaries)
+                      .filter((ts) => selectedTerminalFilter === 'all' || ts.terminalId === selectedTerminalFilter)
+                      .length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="p-6 text-center text-slate-500 font-sans">
+                          لا توجد حركات تسوية مسجلة لأجهزة الكي نت بعد. اضغط على زر &quot;بدء المطابقة الآلية الذكية&quot;.
+                        </td>
+                      </tr>
+                    ) : (
+                      monthlyBreakdowns
+                        .flatMap((mb) => mb.terminalSummaries)
+                        .filter((ts) => selectedTerminalFilter === 'all' || ts.terminalId === selectedTerminalFilter)
+                        .map((ts, idx) => (
+                        <tr key={`${ts.month}-${ts.terminalId}-${idx}`} className="hover:bg-indigo-50/40 transition-colors">
+                          <td className="p-3 font-sans font-bold text-slate-900">{ts.month}</td>
+                          <td className="p-3">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-900 font-bold border border-indigo-200">
+                              <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>جهاز: {ts.terminalId}</span>
+                            </span>
+                          </td>
+                          <td className="p-3 text-center font-bold text-slate-800">{ts.totalSalesLedger.toFixed(3)} د.ك</td>
+                          <td className="p-3 text-center font-bold text-slate-800">{ts.totalSettlementBank.toFixed(3)} د.ك</td>
+                          <td className="p-3 text-center font-bold text-emerald-700 bg-emerald-50/30">
+                            {ts.totalCommissionDeducted.toFixed(3)} د.ك
+                          </td>
+                          <td className="p-3 text-center font-bold text-purple-700 bg-purple-50/30">
+                            {ts.rentalFee.toFixed(3)} د.ك
+                          </td>
+                          <td className="p-3 text-center font-black text-red-600 bg-red-50/40">
+                            {ts.totalDeductions.toFixed(3)} د.ك
+                          </td>
+                          <td className="p-3 text-center font-sans text-slate-700">{ts.transactionCount} حركات</td>
+                          <td className="p-3 text-center font-bold text-indigo-700 font-sans">{ts.averageCommissionRate}%</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {monthlyBreakdowns
+                    .flatMap((mb) => mb.terminalSummaries)
+                    .filter((ts) => selectedTerminalFilter === 'all' || ts.terminalId === selectedTerminalFilter)
+                    .length > 0 && (
+                    <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
+                      <tr>
+                        <td className="p-3 font-sans" colSpan={2}>
+                          {selectedTerminalFilter === 'all' ? 'الإجمالي الكلي لكافة أجهزة الكي نت:' : `إجمالي جهاز #${selectedTerminalFilter}:`}
+                        </td>
+                        <td className="p-3 text-center">
+                          {monthlyBreakdowns
+                            .flatMap((mb) => mb.terminalSummaries)
+                            .filter((ts) => selectedTerminalFilter === 'all' || ts.terminalId === selectedTerminalFilter)
+                            .reduce((sum, ts) => sum + ts.totalSalesLedger, 0).toFixed(3)} د.ك
+                        </td>
+                        <td className="p-3 text-center">
+                          {monthlyBreakdowns
+                            .flatMap((mb) => mb.terminalSummaries)
+                            .filter((ts) => selectedTerminalFilter === 'all' || ts.terminalId === selectedTerminalFilter)
+                            .reduce((sum, ts) => sum + ts.totalSettlementBank, 0).toFixed(3)} د.ك
+                        </td>
+                        <td className="p-3 text-center text-emerald-700">
+                          {knetCommissionTotal.toFixed(3)} د.ك
+                        </td>
+                        <td className="p-3 text-center text-purple-700">
+                          {knetRentTotal.toFixed(3)} د.ك
+                        </td>
+                        <td className="p-3 text-center text-red-600 font-black">
+                          {(knetCommissionTotal + knetRentTotal).toFixed(3)} د.ك
+                        </td>
+                        <td className="p-3 text-center font-sans">
+                          {filteredKnetDiffs.length}
+                        </td>
+                        <td className="p-3 text-center font-sans">-</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+
+            {/* SECTION 2: ITEMISED K-NET DAILY COMMISSIONS LOG */}
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs bg-white">
+              <div className="bg-emerald-50/70 px-4 py-3 border-b border-emerald-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-emerald-700" />
+                  <h4 className="text-xs font-black text-emerald-950">
+                    حركات تسويات مبيعات الكي نت اليومية والعمولات المستقطعة لكل حركة برقم الجهاز
+                  </h4>
+                </div>
+                <span className="text-xs font-bold text-emerald-800">
+                  {filteredKnetDiffs.length} حركة مسجلة &bull; إجمالي العمولات: {knetCommissionTotal.toFixed(3)} د.ك
+                </span>
+              </div>
+
+              <div className="overflow-x-auto max-h-80">
+                <table className="w-full text-right text-xs font-mono">
+                  <thead className="bg-slate-50 text-slate-700 font-bold sticky top-0 border-b border-slate-200 font-sans">
+                    <tr>
+                      <th className="p-3">تاريخ الحركة</th>
+                      <th className="p-3">رقم جهاز الكي نت (TID)</th>
+                      <th className="p-3">المرجع</th>
+                      <th className="p-3 font-sans">بيان الإيداع</th>
+                      <th className="p-3 text-center">مبيعات الدفاتر</th>
+                      <th className="p-3 text-center">المحصل بالبنك</th>
+                      <th className="p-3 text-center text-emerald-700">العمولة المخصومة</th>
+                      <th className="p-3 text-center">النسبة</th>
+                      <th className="p-3 text-center font-sans">الحالة</th>
+                      <th className="p-3 text-center font-sans">الإجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredKnetDiffs.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="p-6 text-center text-slate-500 font-sans">
+                          لا توجد فروقات عمولات كي نت مسجلة.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredKnetDiffs.map((kd) => (
+                        <tr key={kd.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3 font-sans font-bold text-slate-800">{kd.transactionDate}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                              {kd.terminalId || 'جهاز عام'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-emerald-700 font-semibold">{kd.referenceNumber}</td>
+                          <td className="p-3 font-sans text-slate-700 truncate max-w-xs">{kd.description}</td>
+                          <td className="p-3 text-center font-bold text-slate-800">{kd.accountingAmount.toFixed(3)}</td>
+                          <td className="p-3 text-center font-bold text-slate-800">{kd.bankAmount.toFixed(3)}</td>
+                          <td className="p-3 text-center font-black text-emerald-700 bg-emerald-50/50">
+                            {kd.differenceValue.toFixed(3)} د.ك
+                          </td>
+                          <td className="p-3 text-center font-sans font-bold text-indigo-700">
+                            {kd.commissionRate ? `${kd.commissionRate}%` : '-'}
+                          </td>
+                          <td className="p-3 text-center font-sans">
+                            {kd.processingStatus === 'closed_as_fee' ? (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                                مقفل كعمولة ✅
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
+                                معلق
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center font-sans">
+                            {kd.processingStatus === 'pending' && (
+                              <button
+                                onClick={() => handleQuickCloseFee(kd)}
+                                disabled={activeSession.isMonthClosed}
+                                className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition flex items-center gap-1 mx-auto"
+                              >
+                                <Percent className="w-3 h-3" />
+                                <span>إقفال كعمولة</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* SECTION 3: MONTHLY RENTAL (15 KD PER TERMINAL) & CHEQUES LOG */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              
+              {/* Box 1: K-Net Monthly Rental Fee (15 KD) */}
+              <div className="border border-purple-200 rounded-2xl overflow-hidden shadow-xs bg-white">
+                <div className="bg-purple-50/80 px-4 py-3 border-b border-purple-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-purple-700" />
+                    <h4 className="text-xs font-black text-purple-950">
+                      مصروف إيجار أجهزة الكي نت (15 دينار شهرياً لكل جهاز)
+                    </h4>
+                  </div>
+                  <span className="text-xs font-bold text-purple-800">
+                    {knetRentTotal.toFixed(3)} د.ك
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto max-h-60">
+                  <table className="w-full text-right text-xs font-mono">
+                    <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 font-sans">
+                      <tr>
+                        <th className="p-2.5">تاريخ الخصم</th>
+                        <th className="p-2.5">رقم جهاز الكي نت (TID)</th>
+                        <th className="p-2.5">المرجع والبيان</th>
+                        <th className="p-2.5 text-center">المبلغ</th>
+                        <th className="p-2.5 text-center font-sans">الإجراء</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredKnetRentDiffs.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-6 text-center text-slate-500 font-sans">
+                            لا توجد رسوم إيجار أجهزة مسجلة.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredKnetRentDiffs.map((rd) => (
+                          <tr key={rd.id} className="hover:bg-slate-50">
+                            <td className="p-2.5 font-sans font-bold text-slate-800">{rd.transactionDate}</td>
+                            <td className="p-2.5">
+                              <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 text-[10px] font-bold">
+                                {rd.terminalId || 'جهاز عام'}
+                              </span>
+                            </td>
+                            <td className="p-2.5 font-sans text-slate-700 truncate max-w-xs">{rd.description}</td>
+                            <td className="p-2.5 text-center font-black text-purple-700">{rd.differenceValue.toFixed(3)} د.ك</td>
+                            <td className="p-2.5 text-center font-sans">
+                              {rd.processingStatus === 'pending' ? (
+                                <button
+                                  onClick={() => handleQuickCloseFee(rd)}
+                                  disabled={activeSession.isMonthClosed}
+                                  className="px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold"
+                                >
+                                  إثبات كمصروف
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-emerald-700 font-bold">مثبت ✅</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Box 2: Cheques Discrepancies & Unpresented Cheques */}
+              <div className="border border-amber-200 rounded-2xl overflow-hidden shadow-xs bg-white">
+                <div className="bg-amber-50/80 px-4 py-3 border-b border-amber-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-amber-700" />
+                    <h4 className="text-xs font-black text-amber-950">
+                      فروقات الشيكات والشيكات المعلقة لم تقدم للصرف
+                    </h4>
+                  </div>
+                  <span className="text-xs font-bold text-amber-800">
+                    {chequeDiffTotal.toFixed(3)} د.ك
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto max-h-60">
+                  <table className="w-full text-right text-xs font-mono">
+                    <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 font-sans">
+                      <tr>
+                        <th className="p-2.5">رقم الشيك</th>
+                        <th className="p-2.5">التاريخ</th>
+                        <th className="p-2.5 font-sans">النوع والبيان</th>
+                        <th className="p-2.5 text-center">مبلغ البنك</th>
+                        <th className="p-2.5 text-center">مبلغ الدفاتر</th>
+                        <th className="p-2.5 text-center">الفرق</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {chequeDiffs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-slate-500 font-sans">
+                            لا توجد فروقات شيكات مسجلة.
+                          </td>
+                        </tr>
+                      ) : (
+                        chequeDiffs.map((cd) => (
+                          <tr key={cd.id} className="hover:bg-slate-50">
+                            <td className="p-2.5">
+                              <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-bold">
+                                #{cd.chequeNumber || cd.referenceNumber}
+                              </span>
+                            </td>
+                            <td className="p-2.5 font-sans text-slate-800 font-bold">{cd.transactionDate}</td>
+                            <td className="p-2.5 font-sans text-slate-700 truncate max-w-xs">{cd.description}</td>
+                            <td className="p-2.5 text-center text-slate-800">{cd.bankAmount.toFixed(3)}</td>
+                            <td className="p-2.5 text-center text-slate-800">{cd.accountingAmount.toFixed(3)}</td>
+                            <td className="p-2.5 text-center font-black text-red-600 bg-red-50/50">
+                              {cd.differenceValue.toFixed(3)} د.ك
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
             </div>
 
           </div>

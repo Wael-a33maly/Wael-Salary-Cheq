@@ -12,6 +12,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { BankStatementTransaction, AccountingTransaction } from '../../types/reconciliationTypes';
+import { extractChequeNumber, extractKnetTerminalId } from '../../utils/reconciliationEngine';
 
 interface ExcelImportModalProps {
   isOpen: boolean;
@@ -47,6 +48,30 @@ interface AppColumnMapping {
   chequeNumber: string;
   transferNumber: string;
   partyName: string;
+}
+
+// Helper to parse signed numbers with currency symbols, parentheses e.g. "(15.000)" or "-15.000" or "+500.000"
+function parseSignedAmount(val: any): number {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return val;
+  let str = String(val).trim();
+  let isNegative = false;
+  if (str.startsWith('(') && str.endsWith(')')) {
+    isNegative = true;
+    str = str.slice(1, -1);
+  } else if (str.startsWith('-') || str.endsWith('-')) {
+    isNegative = true;
+    str = str.replace(/-/g, '');
+  } else if (str.startsWith('+')) {
+    str = str.replace(/\+/g, '');
+  }
+  // Check for DR/CR indicator in Arabic or English
+  if (/dr\b|مدين/i.test(str)) {
+    isNegative = true;
+  }
+  str = str.replace(/[^\d.]/g, '');
+  const num = parseFloat(str) || 0;
+  return isNegative ? -num : num;
 }
 
 export function ExcelImportModal({
@@ -143,27 +168,81 @@ export function ExcelImportModal({
         };
 
         headers.forEach((h) => {
-          const lower = h.toLowerCase();
-          if (lower.includes('date') || lower.includes('تاريخ') || lower.includes('التاريخ')) {
+          const lower = h.toLowerCase().trim();
+          if (lower.includes('date') || lower.includes('تاريخ') || lower.includes('التاريخ') || lower.includes('posting') || lower.includes('value date')) {
             bMap.transactionDate = h;
-          } else if (lower.includes('ref') || lower.includes('مرجع') || lower.includes('رقم العملية')) {
+          } else if (
+            lower.includes('ref') ||
+            lower.includes('مرجع') ||
+            lower.includes('المرجع') ||
+            lower.includes('رقم العملية') ||
+            lower.includes('رقم المرجع') ||
+            lower.includes('رقم الحركة') ||
+            lower.includes('سند') ||
+            lower.includes('doc')
+          ) {
             bMap.referenceNumber = h;
-          } else if (lower.includes('desc') || lower.includes('بيان') || lower.includes('وصف') || lower.includes('تفاصيل')) {
+          } else if (
+            lower.includes('desc') ||
+            lower.includes('بيان') ||
+            lower.includes('البيان') ||
+            lower.includes('وصف') ||
+            lower.includes('تفاصيل') ||
+            lower.includes('شرح') ||
+            lower.includes('particulars') ||
+            lower.includes('narrative')
+          ) {
             bMap.description = h;
-          } else if (lower.includes('debit') || lower.includes('مدين') || lower.includes('سحب') || lower.includes('صرف')) {
+          } else if (lower.includes('debit') || lower.includes('مدين') || lower.includes('سحب') || lower.includes('صرف') || lower.includes('خصم')) {
             bMap.debit = h;
           } else if (lower.includes('credit') || lower.includes('دائن') || lower.includes('إيداع') || lower.includes('مقبوضات')) {
             bMap.credit = h;
+          } else if (
+            lower.includes('amount') ||
+            lower.includes('المبلغ') ||
+            lower.includes('مبلغ') ||
+            lower.includes('القيمة') ||
+            lower.includes('قيمة') ||
+            lower.includes('قيمة الحركة') ||
+            lower.includes('صافي') ||
+            lower.includes('net') ||
+            lower.includes('حركة')
+          ) {
+            bMap.netAmount = h;
           } else if (lower.includes('balance') || lower.includes('رصيد') || lower.includes('الرصيد')) {
             bMap.balanceAfter = h;
-          } else if (lower.includes('party') || lower.includes('مستفيد') || lower.includes('الطرف')) {
+          } else if (lower.includes('party') || lower.includes('مستفيد') || lower.includes('الطرف') || lower.includes('المودع') || lower.includes('مودع')) {
             bMap.partyName = h;
-          } else if (lower.includes('cheque') || lower.includes('شيك') || lower.includes('chk')) {
+          } else if (lower.includes('cheque') || lower.includes('شيك') || lower.includes('chk') || lower.includes('chq')) {
             bMap.chequeNumber = h;
-          } else if (lower.includes('transfer') || lower.includes('تحويل') || lower.includes('trf')) {
+          } else if (lower.includes('transfer') || lower.includes('تحويل') || lower.includes('trf') || lower.includes('trsh_number') || lower.includes('ibnk_trs')) {
             bMap.transferNumber = h;
           }
         });
+
+        // Smart Single Amount Column fallback:
+        if ((!bMap.debit || !bMap.credit) && !bMap.netAmount) {
+          const singleAmountCandidate = headers.find((h) => /مبلغ|قيمة|amount|net|حركة|رصيد الحركة/i.test(h));
+          if (singleAmountCandidate) bMap.netAmount = singleAmountCandidate;
+        }
+
+        // If only debit was mapped to a column named "المبلغ", shift to netAmount
+        if (bMap.debit && !bMap.credit && !bMap.netAmount && /مبلغ|amount|قيمة/i.test(bMap.debit)) {
+          bMap.netAmount = bMap.debit;
+          bMap.debit = '';
+        }
+
+        // If description is missing but reference exists (like in Kuwait bank statements where "مرجع" contains the narration)
+        if (!bMap.description && bMap.referenceNumber) {
+          bMap.description = bMap.referenceNumber;
+        }
+
+        // Auto map TRSH_NUMBER or sequence number if present
+        const trshCandidate = headers.find((h) => /trsh_number|trs_seq|seq_num|ibnk_trs/i.test(h));
+        if (trshCandidate && !bMap.transferNumber) {
+          bMap.transferNumber = trshCandidate;
+        }
+
         setBankMapping(bMap);
       } else {
         // Auto-detect App/Accounting columns
@@ -182,14 +261,14 @@ export function ExcelImportModal({
         };
 
         headers.forEach((h) => {
-          const lower = h.toLowerCase();
+          const lower = h.toLowerCase().trim();
           if (lower.includes('تاريخ') || lower.includes('date')) {
             aMap.entryDate = h;
           } else if (lower.includes('سند') || lower.includes('مرجع') || lower.includes('ref')) {
             aMap.referenceNumber = h;
           } else if (lower.includes('قيد') || lower.includes('journal') || lower.includes('jv')) {
             aMap.journalEntryNumber = h;
-          } else if (lower.includes('بيان') || lower.includes('وصف') || lower.includes('desc')) {
+          } else if (lower.includes('بيان') || lower.includes('وصف') || lower.includes('desc') || lower.includes('شرح')) {
             aMap.description = h;
           } else if (lower.includes('حساب') || lower.includes('طرف') || lower.includes('عميل') || lower.includes('مورد')) {
             aMap.counterAccountName = h;
@@ -205,6 +284,12 @@ export function ExcelImportModal({
             aMap.partyName = h;
           }
         });
+
+        // If reference is not mapped, use journalEntryNumber as reference fallback
+        if (!aMap.referenceNumber && aMap.journalEntryNumber) {
+          aMap.referenceNumber = aMap.journalEntryNumber;
+        }
+
         setAppMapping(aMap);
       }
 
@@ -260,15 +345,31 @@ export function ExcelImportModal({
         }
 
         const refVal = refIdx >= 0 ? String(row[refIdx] || '').trim() : `BANK-REF-${rowNum}`;
-        const descVal = descIdx >= 0 ? String(row[descIdx] || '').trim() : 'عملية بنكية';
+        const descVal = descIdx >= 0 ? String(row[descIdx] || '').trim() : (refIdx >= 0 && refVal ? refVal : 'عملية بنكية');
 
-        let debitVal = debitIdx >= 0 ? parseFloat(String(row[debitIdx]).replace(/,/g, '')) || 0 : 0;
-        let creditVal = creditIdx >= 0 ? parseFloat(String(row[creditIdx]).replace(/,/g, '')) || 0 : 0;
+        let debitVal = debitIdx >= 0 ? parseSignedAmount(row[debitIdx]) : 0;
+        let creditVal = creditIdx >= 0 ? parseSignedAmount(row[creditIdx]) : 0;
 
-        if (netIdx >= 0 && debitVal === 0 && creditVal === 0) {
-          const netParsed = parseFloat(String(row[netIdx]).replace(/,/g, '')) || 0;
-          if (netParsed < 0) debitVal = Math.abs(netParsed);
-          else creditVal = netParsed;
+        // If netAmount (single +/- column) is mapped
+        if (netIdx >= 0) {
+          const netParsed = parseSignedAmount(row[netIdx]);
+          if (netParsed < 0) {
+            debitVal = Math.abs(netParsed);
+            creditVal = 0;
+          } else if (netParsed > 0) {
+            creditVal = netParsed;
+            debitVal = 0;
+          }
+        } else {
+          // If debit column actually contained negative numbers e.g. -15.000 or (15.000)
+          if (debitVal < 0) {
+            creditVal = Math.abs(debitVal);
+            debitVal = 0;
+          }
+          if (creditVal < 0) {
+            debitVal = Math.abs(creditVal);
+            creditVal = 0;
+          }
         }
 
         if (debitVal === 0 && creditVal === 0) {
@@ -276,12 +377,28 @@ export function ExcelImportModal({
         }
 
         const netAmount = creditVal - debitVal;
-        const balVal = balIdx >= 0 ? parseFloat(String(row[balIdx]).replace(/,/g, '')) || 0 : 0;
+        const balVal = balIdx >= 0 ? parseSignedAmount(row[balIdx]) : 0;
 
-        if (refVal && seenRefs.has(refVal)) {
-          errors.push({ row: rowNum, error: `رقم مرجع مكرر (${refVal})` });
-        } else if (refVal) {
+        // Note: In bank statements, multiple rows frequently share the same reference (e.g. daily KNet settlement or cash deposit batches).
+        // This is normal and allowed in bank statements.
+        if (refVal) {
           seenRefs.add(refVal);
+        }
+
+        // Smart Extraction: Extract Cheque Number from reference, description, or cheque column
+        let chkVal = chkIdx >= 0 ? String(row[chkIdx] || '').trim() : '';
+        if (!chkVal) {
+          chkVal = extractChequeNumber(refVal, descVal) || '';
+        }
+
+        // Smart Extraction: Extract KNET Terminal ID (TID) from reference or description
+        let tidVal = extractKnetTerminalId(refVal, descVal) || '';
+
+        // Smart Extraction: Extract Depositor / Party Name if mentioned in reference
+        let partyVal = partyIdx >= 0 ? String(row[partyIdx] || '').trim() : undefined;
+        if (!partyVal) {
+          const depMatch = `${refVal} ${descVal}`.match(/(?:المودع|مودع|بواسطة|من|لأمر|لصالح)\s*[:\s]\s*([^\d,;\n]+)/i);
+          if (depMatch) partyVal = depMatch[1].trim();
         }
 
         transactions.push({
@@ -295,9 +412,10 @@ export function ExcelImportModal({
           credit: Math.abs(creditVal),
           netAmount,
           balanceAfter: balVal,
-          partyName: partyIdx >= 0 ? String(row[partyIdx] || '').trim() : undefined,
-          chequeNumber: chkIdx >= 0 ? String(row[chkIdx] || '').trim() : undefined,
+          partyName: partyVal,
+          chequeNumber: chkVal || undefined,
           transferNumber: trfIdx >= 0 ? String(row[trfIdx] || '').trim() : undefined,
+          terminalId: tidVal || undefined,
           matchStatus: 'unmatched',
           hasError: errors.some((e) => e.row === rowNum),
         });
@@ -347,18 +465,32 @@ export function ExcelImportModal({
           errors.push({ row: rowNum, error: `تاريخ غير صحيح (${dateVal || 'فارغ'})` });
         }
 
-        const refVal = refIdx >= 0 ? String(row[refIdx] || '').trim() : `APP-REF-${rowNum}`;
         const jvVal = jvIdx >= 0 ? String(row[jvIdx] || '').trim() : `JV-${rowNum}`;
+        const refVal = refIdx >= 0 ? String(row[refIdx] || '').trim() : (jvIdx >= 0 && jvVal ? jvVal : `APP-REF-${rowNum}`);
         const descVal = descIdx >= 0 ? String(row[descIdx] || '').trim() : 'حركة دفترية بالتطبيق';
         const counterVal = counterIdx >= 0 ? String(row[counterIdx] || '').trim() : 'حساب عام';
 
-        let debitVal = debitIdx >= 0 ? parseFloat(String(row[debitIdx]).replace(/,/g, '')) || 0 : 0;
-        let creditVal = creditIdx >= 0 ? parseFloat(String(row[creditIdx]).replace(/,/g, '')) || 0 : 0;
+        let debitVal = debitIdx >= 0 ? parseSignedAmount(row[debitIdx]) : 0;
+        let creditVal = creditIdx >= 0 ? parseSignedAmount(row[creditIdx]) : 0;
 
-        if (netIdx >= 0 && debitVal === 0 && creditVal === 0) {
-          const netParsed = parseFloat(String(row[netIdx]).replace(/,/g, '')) || 0;
-          if (netParsed > 0) debitVal = netParsed;
-          else creditVal = Math.abs(netParsed);
+        if (netIdx >= 0) {
+          const netParsed = parseSignedAmount(row[netIdx]);
+          if (netParsed > 0) {
+            debitVal = netParsed;
+            creditVal = 0;
+          } else if (netParsed < 0) {
+            creditVal = Math.abs(netParsed);
+            debitVal = 0;
+          }
+        } else {
+          if (debitVal < 0) {
+            creditVal = Math.abs(debitVal);
+            debitVal = 0;
+          }
+          if (creditVal < 0) {
+            debitVal = Math.abs(creditVal);
+            creditVal = 0;
+          }
         }
 
         if (debitVal === 0 && creditVal === 0) {
@@ -366,6 +498,15 @@ export function ExcelImportModal({
         }
 
         const netAmount = debitVal - creditVal;
+
+        // Smart Extraction for Accounting: Extract Cheque Number if not explicitly mapped
+        let accChkVal = chkIdx >= 0 ? String(row[chkIdx] || '').trim() : '';
+        if (!accChkVal) {
+          accChkVal = extractChequeNumber(refVal, `${descVal} ${counterVal}`) || '';
+        }
+
+        // Smart Extraction for Accounting: Extract KNET Terminal ID (TID) from reference or description
+        let accTidVal = extractKnetTerminalId(refVal, `${descVal} ${counterVal}`) || '';
 
         accTransactions.push({
           id: `imported-app-${Date.now()}-${index}`,
@@ -378,8 +519,9 @@ export function ExcelImportModal({
           debit: Math.abs(debitVal),
           credit: Math.abs(creditVal),
           netAmount,
-          chequeNumber: chkIdx >= 0 ? String(row[chkIdx] || '').trim() : undefined,
+          chequeNumber: accChkVal || undefined,
           transferNumber: trfIdx >= 0 ? String(row[trfIdx] || '').trim() : undefined,
+          terminalId: accTidVal || undefined,
           partyName: partyIdx >= 0 ? String(row[partyIdx] || '').trim() : counterVal,
           createdBy: 'استيراد إكسيل التطبيق',
           status: 'posted',
@@ -572,9 +714,39 @@ export function ExcelImportModal({
                     </select>
                   </div>
 
+                  {/* Single Amount Column (Kuwati banks +/- amount column) */}
+                  <div className="col-span-1 md:col-span-2 bg-emerald-50/80 border border-emerald-300 rounded-xl p-3 shadow-2xs">
+                    <label className="block text-xs font-black text-emerald-950 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <span>عمود المبلغ المشترك (+ إيداع / - سحب)</span>
+                        <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                          نمط البنوك الكويتية (CBK / NBK / KFH)
+                        </span>
+                      </span>
+                      {bankMapping.netAmount && (
+                        <span className="text-[11px] text-emerald-700 font-bold">
+                          ✓ العمود المحدد: ({bankMapping.netAmount})
+                        </span>
+                      )}
+                    </label>
+                    <p className="text-[11px] text-emerald-800 mb-2 leading-relaxed font-sans">
+                      اختر هذا العمود إذا كان كشف حساب البنك يعرض المدين والدائن في عامود واحد؛ حيث الإيداعات والتحويلات الواردة موجبة (+) والخصومات والشيكات ومصروفات كي نت سالبة (-).
+                    </p>
+                    <select
+                      value={bankMapping.netAmount}
+                      onChange={(e) => setBankMapping({ ...bankMapping, netAmount: e.target.value })}
+                      className="w-full bg-white border border-emerald-300 rounded-lg p-2 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">-- غير محدد (إذا كان لديك عمودان منفصلان للمدين والدائن) --</option>
+                      {rawHeaders.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      المبلغ المدين / سحب (Debit)
+                      المبلغ المدين / سحب (Debit) - إذا وجد عمود منفصل
                     </label>
                     <select
                       value={bankMapping.debit}
@@ -590,7 +762,7 @@ export function ExcelImportModal({
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      المبلغ الدائن / إيداع (Credit)
+                      المبلغ الدائن / إيداع (Credit) - إذا وجد عمود منفصل
                     </label>
                     <select
                       value={bankMapping.credit}

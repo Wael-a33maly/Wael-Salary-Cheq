@@ -178,6 +178,29 @@ class DatabaseService {
   }
 
   /**
+   * حفظ / استيراد قائمة الموظفين في قاعدة بيانات MySQL
+   */
+  async saveEmployeesToDb(employees: any[]): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=save_employees`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ employees }),
+      });
+
+      if (!res.ok) return false;
+      const json = await res.json();
+      return !!json.success;
+    } catch (err) {
+      console.warn('Error saving employees to DB:', err);
+      return false;
+    }
+  }
+
+  /**
    * حفظ الحسابات البنكية والقوالب بالسنتيمتر في قاعدة بيانات MySQL
    */
   async saveBankAccountsToDb(accounts: BankAccount[]): Promise<boolean> {

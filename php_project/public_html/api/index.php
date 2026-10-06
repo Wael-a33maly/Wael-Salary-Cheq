@@ -1002,6 +1002,103 @@ if ($action === 'save_beneficiaries') {
 }
 
 // =========================================================================
+// 8.1 حفظ / استيراد الموظفين (Save / Import Employees)
+// =========================================================================
+if ($action === 'save_employees') {
+    try {
+        $emps = $inputData['employees'] ?? [];
+        if (!is_array($emps)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'مصفوفة الموظفين غير صالحة'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // جلب أول فرع وقسم للاستخدام كافتراضي إذا لم يتوفر
+        $defaultBranchId = 1;
+        $defaultDeptId = 1;
+        try {
+            $fb = $pdo->query("SELECT id FROM branches LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            if ($fb && !empty($fb['id'])) $defaultBranchId = (int)$fb['id'];
+            $fd = $pdo->query("SELECT id FROM departments LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            if ($fd && !empty($fd['id'])) $defaultDeptId = (int)$fd['id'];
+        } catch (Throwable $e) {}
+
+        $stmt = $pdo->prepare("
+            INSERT INTO employees (
+                id, civil_id, name, job_title, branch_id, department_id,
+                basic_salary, daily_work_hours, bank_enabled, bank_transfer_amount,
+                bank_name, iban, residence_expiry_date, hire_date, status
+            ) VALUES (
+                :id, :civil_id, :name, :job_title, :branch_id, :department_id,
+                :basic_salary, :daily_work_hours, :bank_enabled, :bank_transfer_amount,
+                :bank_name, :iban, :residence_expiry_date, :hire_date, :status
+            )
+            ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                job_title = VALUES(job_title),
+                branch_id = VALUES(branch_id),
+                department_id = VALUES(department_id),
+                basic_salary = VALUES(basic_salary),
+                daily_work_hours = VALUES(daily_work_hours),
+                bank_enabled = VALUES(bank_enabled),
+                bank_transfer_amount = VALUES(bank_transfer_amount),
+                bank_name = VALUES(bank_name),
+                iban = VALUES(iban),
+                residence_expiry_date = VALUES(residence_expiry_date),
+                status = VALUES(status)
+        ");
+
+        foreach ($emps as $e) {
+            $cid = trim((string)($e['civilId'] ?? $e['civil_id'] ?? ''));
+            if (empty($cid)) continue;
+
+            $empId = !empty($e['id']) && is_numeric($e['id']) && (int)$e['id'] < 2147483647 ? (int)$e['id'] : null;
+            $name = trim((string)($e['fullName'] ?? $e['name'] ?? 'موظف'));
+            $jobTitle = trim((string)($e['jobTitle'] ?? $e['job_title'] ?? 'موظف'));
+            $bId = !empty($e['branchId']) ? (int)$e['branchId'] : (!empty($e['branch_id']) ? (int)$e['branch_id'] : $defaultBranchId);
+            $dId = !empty($e['departmentId']) ? (int)$e['departmentId'] : (!empty($e['department_id']) ? (int)$e['department_id'] : $defaultDeptId);
+            $salary = isset($e['basicSalary']) ? (float)$e['basicSalary'] : (isset($e['basic_salary']) ? (float)$e['basic_salary'] : 0);
+            $hours = !empty($e['dailyHours']) ? (int)$e['dailyHours'] : (!empty($e['daily_work_hours']) ? (int)$e['daily_work_hours'] : 11);
+            $transfer = isset($e['bankTransferAmount']) ? (float)$e['bankTransferAmount'] : (isset($e['bank_transfer_amount']) ? (float)$e['bank_transfer_amount'] : 0);
+            $bankEnabled = ($transfer > 0 || !empty($e['iban'])) ? 1 : 0;
+            $bankName = trim((string)($e['bankName'] ?? $e['bank_name'] ?? ''));
+            $iban = trim((string)($e['iban'] ?? ''));
+            $expiry = !empty($e['residenceExpiryDate']) ? trim((string)$e['residenceExpiryDate']) : (!empty($e['residence_expiry_date']) ? trim((string)$e['residence_expiry_date']) : null);
+            if ($expiry && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiry)) {
+                $expiry = null;
+            }
+            $hireDate = !empty($e['hireDate']) ? trim((string)$e['hireDate']) : date('Y-m-d');
+            $st = ($e['status'] ?? '') === 'inactive' || ($e['status'] ?? '') === 'suspended' ? 'suspended' : 'active';
+
+            $stmt->execute([
+                ':id' => $empId,
+                ':civil_id' => $cid,
+                ':name' => $name,
+                ':job_title' => $jobTitle,
+                ':branch_id' => $bId,
+                ':department_id' => $dId,
+                ':basic_salary' => $salary,
+                ':daily_work_hours' => $hours,
+                ':bank_enabled' => $bankEnabled,
+                ':bank_transfer_amount' => $transfer,
+                ':bank_name' => $bankName,
+                ':iban' => $iban,
+                ':residence_expiry_date' => $expiry,
+                ':hire_date' => $hireDate,
+                ':status' => $st,
+            ]);
+        }
+
+        echo json_encode(['success' => true, 'message' => 'تم حفظ وتحديث بيانات الموظفين في قاعدة البيانات بنجاح'], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+// =========================================================================
 // 9. حفظ جلسة مطابقة البنك والحركات والفروقات
 // =========================================================================
 if ($action === 'save_reconciliation_session') {

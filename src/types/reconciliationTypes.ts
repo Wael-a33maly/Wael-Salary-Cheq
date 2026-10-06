@@ -52,6 +52,7 @@ export interface BankStatementTransaction {
   partyName?: string; // اسم الطرف أو المستفيد
   chequeNumber?: string; // رقم الشيك
   transferNumber?: string; // رقم التحويل
+  terminalId?: string; // رقم جهاز الكي نت (TID)
   matchStatus: MatchStatus;
   matchedAccountingId?: string;
   matchedLevel?: 1 | 2 | 3 | 'manual';
@@ -59,6 +60,7 @@ export interface BankStatementTransaction {
   exclusionReason?: string;
   hasError?: boolean;
   validationError?: string;
+  actionTakenNotes?: string;
 }
 
 export interface AccountingTransaction {
@@ -74,6 +76,7 @@ export interface AccountingTransaction {
   netAmount: number; // debit - credit
   chequeNumber?: string;
   transferNumber?: string;
+  terminalId?: string; // رقم جهاز الكي نت إن وجد
   partyName?: string;
   createdBy: string;
   status: 'posted' | 'draft' | 'reversed';
@@ -103,6 +106,10 @@ export interface ReconciliationDifference {
   bankTxId?: string;
   accountingTxId?: string;
   differenceType: 
+    | 'knet_commission'
+    | 'knet_rental_fee'
+    | 'cheque_diff'
+    | 'deposit_diff'
     | 'amount_mismatch'
     | 'date_mismatch'
     | 'missing_in_accounting'
@@ -111,19 +118,58 @@ export interface ReconciliationDifference {
     | 'uncredited_deposit'
     | 'unpresented_cheque'
     | 'duplicate_entry';
+  categoryGroup?: 'knet_commission' | 'knet_rent' | 'cheques' | 'deposits' | 'bank_fees' | 'other';
+  terminalId?: string; // رقم جهاز الكي نت (TID)
+  chequeNumber?: string; // رقم الشيك
+  monthKey?: string; // YYYY-MM
   transactionDate: string;
   referenceNumber: string;
   description: string;
   bankAmount: number;
   accountingAmount: number;
   differenceValue: number;
+  commissionRate?: number; // e.g. 1.5%
   cause: string;
   requiredAction: string;
   responsiblePerson: string;
   processingStatus: 'pending' | 'in_progress' | 'resolved' | 'closed_as_fee';
+  actionTakenNotes?: string;
+  journalEntryNumber?: string;
   notes?: string;
   attachmentName?: string;
   createdAt: string;
+}
+
+export interface KnetTerminalMonthlySummary {
+  terminalId: string;
+  month: string;
+  totalSalesLedger: number;
+  totalSettlementBank: number;
+  totalCommissionDeducted: number;
+  rentalFee: number; // 15 KD per terminal
+  totalDeductions: number; // Commission + Rent
+  transactionCount: number;
+  averageCommissionRate: number; // in %
+}
+
+export interface MonthlyDifferencesBreakdown {
+  month: string;
+  knetCommissionsTotal: number;
+  knetCommissionsCount: number;
+  knetRentalTotal: number;
+  knetRentalCount: number;
+  chequeDifferencesTotal: number;
+  chequeDifferencesCount: number;
+  unpresentedChequesTotal: number;
+  unpresentedChequesCount: number;
+  depositDifferencesTotal: number;
+  depositDifferencesCount: number;
+  bankFeesTotal: number;
+  bankFeesCount: number;
+  otherDifferencesTotal: number;
+  otherDifferencesCount: number;
+  grandTotal: number;
+  terminalSummaries: KnetTerminalMonthlySummary[];
 }
 
 export interface ReconciliationJournalEntry {

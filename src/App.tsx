@@ -248,23 +248,82 @@ export default function App() {
       id: Date.now(),
       civilId: emp.civilId || '290000000000',
       fullName: emp.fullName || 'موظف جديد',
-      branchId: emp.branchId || 1,
-      departmentId: emp.departmentId || 1,
-      basicSalary: emp.basicSalary || 350.000,
+      branchId: emp.branchId || branches[0]?.id || 1,
+      departmentId: emp.departmentId || departments[0]?.id || 1,
+      basicSalary: emp.basicSalary !== undefined ? emp.basicSalary : 350.000,
       dailyHours: emp.dailyHours || 11,
       bankName: emp.bankName || 'بنك الكويت الوطني (NBK)',
       iban: emp.iban || 'KW00NBOK0000000000000000000000',
-      bankTransferAmount: emp.bankTransferAmount || 150.000,
+      bankTransferAmount: emp.bankTransferAmount !== undefined ? emp.bankTransferAmount : 150.000,
       residenceExpiryDate: emp.residenceExpiryDate || '2027-01-01',
       status: emp.status || 'active',
     };
-    setEmployees((prev) => [...prev, newEmp]);
+    setEmployees((prev) => {
+      const nextList = [...prev, newEmp];
+      dbService.saveEmployeesToDb(nextList).catch(() => {});
+      return nextList;
+    });
     addAuditLog('EMPLOYEE_CREATE', 'employees', `إضافة موظف جديد: ${newEmp.fullName}`);
   };
 
   const handleUpdateEmployee = (id: number, emp: Partial<Employee>) => {
-    setEmployees((prev) => prev.map((item) => (item.id === id ? { ...item, ...emp } : item)));
+    setEmployees((prev) => {
+      const nextList = prev.map((item) => (item.id === id ? { ...item, ...emp } : item));
+      dbService.saveEmployeesToDb(nextList).catch(() => {});
+      return nextList;
+    });
     addAuditLog('EMPLOYEE_UPDATE', 'employees', `تحديث بيانات الموظف: ${emp.fullName || id}`);
+  };
+
+  const handleBatchAddEmployees = (newEmps: Partial<Employee>[], updateExisting: boolean) => {
+    setEmployees((prev) => {
+      const updatedList = [...prev];
+      let addedCount = 0;
+      let updatedCount = 0;
+      const baseTime = Date.now();
+
+      newEmps.forEach((emp, idx) => {
+        const cleanCivilId = emp.civilId ? String(emp.civilId).trim() : '';
+        const existingIdx = cleanCivilId && updateExisting
+          ? updatedList.findIndex((e) => String(e.civilId || '').trim() === cleanCivilId)
+          : -1;
+
+        if (existingIdx >= 0) {
+          updatedList[existingIdx] = {
+            ...updatedList[existingIdx],
+            ...emp,
+          };
+          updatedCount++;
+        } else {
+          const newEmp: Employee = {
+            id: baseTime + idx,
+            civilId: cleanCivilId || `29000000${String(idx).padStart(4, '0')}`,
+            fullName: emp.fullName || `موظف ${idx + 1}`,
+            branchId: emp.branchId || branches[0]?.id || 1,
+            departmentId: emp.departmentId || departments[0]?.id || 1,
+            basicSalary: emp.basicSalary !== undefined ? emp.basicSalary : 350.0,
+            dailyHours: emp.dailyHours || 11,
+            bankName: emp.bankName || 'بنك الكويت الوطني (NBK)',
+            iban: emp.iban || '',
+            bankTransferAmount: emp.bankTransferAmount !== undefined ? emp.bankTransferAmount : 0,
+            residenceExpiryDate: emp.residenceExpiryDate || '2027-01-01',
+            status: emp.status || 'active',
+          };
+          updatedList.push(newEmp);
+          addedCount++;
+        }
+      });
+
+      dbService.saveEmployeesToDb(updatedList).catch(() => {});
+
+      addAuditLog(
+        'EMPLOYEE_IMPORT',
+        'employees',
+        `استيراد عبر Excel: تم بنجاح إضافة ${addedCount} موظفاً وتحديث ${updatedCount} موظفاً`
+      );
+
+      return updatedList;
+    });
   };
 
   // User handlers
@@ -772,6 +831,7 @@ export default function App() {
               departments={departments}
               onAddEmployee={handleAddEmployee}
               onUpdateEmployee={handleUpdateEmployee}
+              onBatchAddEmployees={handleBatchAddEmployees}
             />
           )}
 

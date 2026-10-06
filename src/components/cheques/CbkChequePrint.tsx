@@ -185,12 +185,12 @@ export function CbkChequePrint({
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
-  // Formatted Date (DD / MM / YYYY)
+  // Formatted Date (DD/MM/YYYY) with strict LTR direction and no wide spacing
   const formattedDate = (() => {
     try {
       const parts = cheque.dueDate.split('-');
       if (parts.length === 3) {
-        return `${parts[2]} / ${parts[1]} / ${parts[0]}`;
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
       }
     } catch {
       // fallback
@@ -387,10 +387,13 @@ export function CbkChequePrint({
               font-weight: 900;
               color: #000;
               text-align: ${dateAlign};
+              direction: ltr !important;
+              unicode-bidi: isolate;
               white-space: nowrap;
               overflow: hidden;
               box-sizing: border-box;
-              padding: 0 1mm;
+              padding: 0 0.5mm;
+              letter-spacing: -0.2px;
               z-index: 10;
             }
             .payee-field {
@@ -455,7 +458,7 @@ export function CbkChequePrint({
           <div class="cheque-print-surface">
             ${backgroundLayerHtml}
             ${crossingLayerHtml}
-            <div class="date-field">${formattedDate}</div>
+            <div class="date-field" dir="ltr">${formattedDate}</div>
             <div class="payee-field">${cheque.beneficiaryName}</div>
             <div class="words-field">${activeTafqeet}</div>
             <div class="amount-field">${formatChequeAmount(cheque.amount)}</div>
@@ -1344,10 +1347,12 @@ export function CbkChequePrint({
                 fontSize: `${dateFontSize}px`,
                 justifyContent: dateAlign === 'right' ? 'flex-end' : dateAlign === 'left' ? 'flex-start' : 'center',
               }}
-              className="flex items-center font-mono font-black text-slate-950 tracking-wider z-10 overflow-hidden"
+              dir="ltr"
+              className="flex items-center font-mono font-black text-slate-950 tracking-normal z-10 overflow-hidden"
             >
               <span 
-                style={{ textAlign: dateAlign }}
+                style={{ textAlign: dateAlign, direction: 'ltr', unicodeBidi: 'isolate' }}
+                dir="ltr"
                 className={`select-all print:text-black font-mono font-black truncate max-w-full w-full ${
                   dateAlign === 'right' ? 'text-right' : dateAlign === 'left' ? 'text-left' : 'text-center'
                 }`}

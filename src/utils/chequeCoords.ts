@@ -43,9 +43,9 @@ export function getChequeBaseCoords(widthMm: number, heightMm: number): ChequeCo
   const safeH = heightMm > 0 ? heightMm : 90;
 
   // Date
-  const dateW = 36;
+  const dateW = 38;
   const dateH = 8.5;
-  const dateL = Math.max(0, Math.round(safeW - 10 - dateW)); // 180 - 46 = 134mm
+  const dateL = Math.max(0, Math.round(safeW - 10 - dateW)); // 180 - 48 = 132mm
   const dateT = Math.round(safeH * (12 / 90) * 10) / 10; // 12mm on 90mm
 
   // Payee (اسم المستفيد):

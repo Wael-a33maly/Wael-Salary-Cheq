@@ -10,10 +10,14 @@ import {
   CheckCircle2, 
   Printer, 
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Download,
+  Upload
 } from 'lucide-react';
 import { Employee, Branch, Department } from '../types';
 import { getResidenceStatus } from '../mockData';
+import { exportEmployeeImportTemplate } from '../utils/employeeExcel';
+import { EmployeeImportModal } from './EmployeeImportModal';
 
 interface EmployeesViewProps {
   employees: Employee[];
@@ -21,6 +25,7 @@ interface EmployeesViewProps {
   departments: Department[];
   onAddEmployee: (emp: Partial<Employee>) => void;
   onUpdateEmployee: (id: number, emp: Partial<Employee>) => void;
+  onBatchAddEmployees?: (employees: Partial<Employee>[], updateExisting: boolean) => void;
 }
 
 export function EmployeesView({
@@ -29,6 +34,7 @@ export function EmployeesView({
   departments,
   onAddEmployee,
   onUpdateEmployee,
+  onBatchAddEmployees,
 }: EmployeesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
@@ -38,6 +44,7 @@ export function EmployeesView({
   const [selectedEmployeeForCard, setSelectedEmployeeForCard] = useState<Employee | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Form State for Add / Edit
   const [formData, setFormData] = useState({
@@ -133,13 +140,47 @@ export function EmployeesView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Download Blank Excel Template */}
+          <button
+            type="button"
+            onClick={() => exportEmployeeImportTemplate(branches, departments, true)}
+            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-emerald-300 transition active:scale-95 shadow-2xs"
+            title="تنزيل قالب إكسيل فارغ جاهز للملء مباشرة"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            <span>تنزيل قالب فارغ</span>
+          </button>
+
+          {/* Download Excel Template with Examples */}
+          <button
+            type="button"
+            onClick={() => exportEmployeeImportTemplate(branches, departments, false)}
+            className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-300 transition active:scale-95 shadow-2xs"
+            title="تنزيل نموذج Excel معبأ بأمثلة توضيحية ودليل الفروع والبنوك"
+          >
+            <Download className="w-4 h-4 text-slate-600" />
+            <span>قالب بأمثلة</span>
+          </button>
+
+          {/* Import from Excel */}
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition active:scale-95"
+            title="استيراد وتعبئة موظفي المنشأة دفعة واحدة من ملف Excel"
+          >
+            <Upload className="w-4 h-4" />
+            <span>استيراد من Excel</span>
+          </button>
+
+          {/* Add single employee manually */}
           <button
             onClick={openAddModal}
             className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            <span>إضافة موظف جديد</span>
+            <span>إضافة موظف يدوي</span>
           </button>
         </div>
       </div>
@@ -616,6 +657,32 @@ export function EmployeesView({
           </div>
         </div>
       )}
+
+      {/* Excel Import Modal */}
+      <EmployeeImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        branches={branches}
+        departments={departments}
+        existingEmployees={employees}
+        onImportSuccess={(importedEmployees, updateExisting) => {
+          if (onBatchAddEmployees) {
+            onBatchAddEmployees(importedEmployees, updateExisting);
+          } else {
+            // Self-contained fallback
+            importedEmployees.forEach((emp) => {
+              const existing = updateExisting && emp.civilId
+                ? employees.find((e) => e.civilId === emp.civilId)
+                : null;
+              if (existing) {
+                onUpdateEmployee(existing.id, emp);
+              } else {
+                onAddEmployee(emp);
+              }
+            });
+          }
+        }}
+      />
 
     </div>
   );
