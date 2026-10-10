@@ -42,6 +42,7 @@ export const INITIAL_DEPARTMENTS: Department[] = [
 export const INITIAL_EMPLOYEES: Employee[] = [
   {
     id: 1,
+    jobNumber: 'EMP-1001',
     civilId: '290041501234',
     fullName: 'أحمد محمود السعيد',
     branchId: 1,
@@ -56,6 +57,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 2,
+    jobNumber: 'EMP-1002',
     civilId: '288120805678',
     fullName: 'خالد عبد الرحمن المنصور',
     branchId: 1,
@@ -70,6 +72,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 3,
+    jobNumber: 'EMP-1003',
     civilId: '294062103456',
     fullName: 'محمد إبراهيم الفارسي',
     branchId: 1,
@@ -84,6 +87,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 4,
+    jobNumber: 'EMP-1004',
     civilId: '292081409876',
     fullName: 'طارق صلاح الدين النجار',
     branchId: 1,
@@ -98,6 +102,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 5,
+    jobNumber: 'EMP-1005',
     civilId: '291030504321',
     fullName: 'يوسف جمال العوضي',
     branchId: 2,
@@ -112,6 +117,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 6,
+    jobNumber: 'EMP-1006',
     civilId: '295111908765',
     fullName: 'عمر شريف الدسوقي',
     branchId: 2,
@@ -126,6 +132,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 7,
+    jobNumber: 'EMP-1007',
     civilId: '293072802468',
     fullName: 'سامي عبد الله الحداد',
     branchId: 2,
@@ -140,6 +147,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 8,
+    jobNumber: 'EMP-1008',
     civilId: '289051001357',
     fullName: 'بسام نبيل العلي',
     branchId: 3,
@@ -154,6 +162,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 9,
+    jobNumber: 'EMP-1009',
     civilId: '296021508901',
     fullName: 'رامي كمال الشيخ',
     branchId: 3,
@@ -168,6 +177,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 10,
+    jobNumber: 'EMP-1010',
     civilId: '290091807654',
     fullName: 'ماجد عبد الحميد رضوان',
     branchId: 3,
@@ -182,6 +192,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 11,
+    jobNumber: 'EMP-1011',
     civilId: '292100405432',
     fullName: 'حسام الدين مصطفى',
     branchId: 4,
@@ -196,6 +207,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   },
   {
     id: 12,
+    jobNumber: 'EMP-1012',
     civilId: '294121206789',
     fullName: 'فهد عادل الشمري',
     branchId: 4,
@@ -216,6 +228,7 @@ export const INITIAL_USERS: UserAccount[] = [
     username: 'admin',
     fullName: 'المسؤول العام للنظام',
     email: 'admin@company.com.kw',
+    password: '159357',
     role: 'admin',
     status: 'active',
     branchId: null,
@@ -226,6 +239,7 @@ export const INITIAL_USERS: UserAccount[] = [
     username: 'accountant_kw',
     fullName: 'أحمد المحاسب المالي',
     email: 'accountant@company.com.kw',
+    password: '159357',
     role: 'accountant',
     status: 'active',
     branchId: null,
@@ -236,6 +250,7 @@ export const INITIAL_USERS: UserAccount[] = [
     username: 'auditor_view',
     fullName: 'مراقب التدقيق المالي',
     email: 'auditor@company.com.kw',
+    password: '159357',
     role: 'viewer',
     status: 'active',
     branchId: 1,

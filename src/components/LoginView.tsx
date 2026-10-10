@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, User, ShieldCheck, AlertCircle, Building2, Key, Loader2 } from 'lucide-react';
+import { Lock, User, AlertCircle, Key, Loader2 } from 'lucide-react';
 import { CompanySettings } from '../types';
 import { dbService } from '../services/apiService';
 
@@ -11,7 +11,7 @@ interface LoginViewProps {
 
 export function LoginView({ settings, onLoginSuccess, onOpenGuide }: LoginViewProps) {
   const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('Admin@2026!');
+  const [password, setPassword] = useState('159357');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [attempts, setAttempts] = useState(0);
@@ -63,6 +63,27 @@ export function LoginView({ settings, onLoginSuccess, onOpenGuide }: LoginViewPr
           </p>
         </div>
 
+        {/* Default credentials notice banner (Preview only) */}
+        <div className="bg-blue-50/90 border-b border-blue-100 p-3.5 text-xs text-blue-900 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-blue-950">بيانات الدخول للمعاينة:</span>
+            <code className="bg-white px-2 py-0.5 rounded border border-blue-200 text-blue-800 font-mono font-bold">admin</code>
+            <span className="text-slate-400">/</span>
+            <code className="bg-white px-2 py-0.5 rounded border border-blue-200 text-blue-800 font-mono font-bold">159357</code>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setUsername('admin');
+              setPassword('159357');
+              setError(null);
+            }}
+            className="text-[11px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded-lg transition shrink-0 shadow-xs"
+          >
+            تعبئة تلقائية
+          </button>
+        </div>
+
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
           
@@ -83,7 +104,7 @@ export function LoginView({ settings, onLoginSuccess, onOpenGuide }: LoginViewPr
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full pl-3 pr-10 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono"
-                placeholder="admin"
+                placeholder="أدخل اسم المستخدم"
               />
             </div>
           </div>
@@ -98,7 +119,7 @@ export function LoginView({ settings, onLoginSuccess, onOpenGuide }: LoginViewPr
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-3 pr-10 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono"
-                placeholder="••••••••"
+                placeholder="أدخل كلمة المرور"
               />
             </div>
           </div>
@@ -121,18 +142,6 @@ export function LoginView({ settings, onLoginSuccess, onOpenGuide }: LoginViewPr
                 </>
               )}
             </button>
-          </div>
-
-          {/* Quick Demo Credentials Box */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-600 space-y-1 text-[11px]">
-            <div className="font-bold text-slate-800 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-              <span>بيانات الحساب الافتراضية للدخول:</span>
-            </div>
-            <div className="flex justify-between font-mono pt-0.5">
-              <span>اسم المستخدم: <strong>admin</strong></span>
-              <span>كلمة المرور: <strong>Admin@2026!</strong></span>
-            </div>
           </div>
 
           <div className="pt-2 text-center">

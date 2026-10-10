@@ -179,6 +179,7 @@ export function EmployeeImportModal({
     }
 
     const payload: Partial<Employee>[] = selectedRows.map((r) => ({
+      jobNumber: r.jobNumber,
       civilId: r.civilId,
       fullName: r.fullName,
       branchId: r.branchId,
@@ -419,6 +420,7 @@ export function EmployeeImportModal({
                           />
                         </th>
                         <th className="p-2.5 w-10 text-center">#</th>
+                        <th className="p-2.5">الرقم الوظيفي</th>
                         <th className="p-2.5">الموظف</th>
                         <th className="p-2.5">الرقم المدني</th>
                         <th className="p-2.5">الفرع والقسم</th>
@@ -432,7 +434,7 @@ export function EmployeeImportModal({
                     <tbody className="divide-y divide-slate-100">
                       {filteredRows.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="p-8 text-center text-slate-400">
+                          <td colSpan={11} className="p-8 text-center text-slate-400">
                             لا توجد صفوف تطابق عامل التصفية المحدد.
                           </td>
                         </tr>
@@ -461,6 +463,11 @@ export function EmployeeImportModal({
                               </td>
                               <td className="p-2.5 text-center font-mono text-slate-400">
                                 {row.index}
+                              </td>
+                              <td className="p-2.5 font-mono font-bold text-blue-700">
+                                {row.jobNumber || (
+                                  <span className="text-slate-400 font-normal">-</span>
+                                )}
                               </td>
                               <td className="p-2.5 font-bold text-slate-900">
                                 {row.fullName || (

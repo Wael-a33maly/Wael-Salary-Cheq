@@ -223,12 +223,23 @@ export function IssueChequeForm({
     }
   }, [selectedBookId, chequeBooks]);
 
-  // Synchronize beneficiary selection
+  // Synchronize beneficiary selection based on the beneficiary's registered preferred language
   useEffect(() => {
     if (selectedBeneficiaryId) {
       const b = beneficiaries.find((item) => item.id === selectedBeneficiaryId);
       if (b) {
-        setBeneficiaryName(b.nameAr);
+        const prefLang = b.preferredPrintLang || 'ar';
+        setTafqeetLang(prefLang);
+        setIsManualWords(false);
+        if (prefLang === 'en') {
+          // English preferred: select English name first, fallback to Arabic name if English not set
+          setBeneficiaryName(b.nameEn?.trim() || b.nameAr);
+          setAmountInWords(tafqeetKwdEn(amount));
+        } else {
+          // Arabic preferred: select Arabic name
+          setBeneficiaryName(b.nameAr);
+          setAmountInWords(tafqeetKwd(amount));
+        }
       }
     }
   }, [selectedBeneficiaryId, beneficiaries]);
@@ -251,6 +262,19 @@ export function IssueChequeForm({
     setTafqeetLang(lang);
     setIsManualWords(false);
     setAmountInWords(lang === 'en' ? tafqeetKwdEn(amount) : tafqeetKwd(amount));
+
+    // Allow user to manually toggle language without losing link to beneficiary:
+    // If beneficiary has both names, adapt the name input to the selected language
+    if (selectedBeneficiaryId) {
+      const b = beneficiaries.find((item) => item.id === selectedBeneficiaryId);
+      if (b) {
+        if (lang === 'en' && b.nameEn?.trim()) {
+          setBeneficiaryName(b.nameEn.trim());
+        } else if (lang === 'ar' && b.nameAr?.trim()) {
+          setBeneficiaryName(b.nameAr.trim());
+        }
+      }
+    }
   };
 
   const handleResetWordsToAuto = () => {
@@ -280,6 +304,17 @@ export function IssueChequeForm({
   const previewWordsHeight = previewCoords.words.height;
   const previewWordsFontSize = previewCoords.words.fontSize;
   const previewWordsAlign = previewCoords.words.align;
+
+  // Language-aware auto alignment: English -> Left, Arabic -> Right
+  const effectivePreviewPayeeDir = tafqeetLang === 'en' ? 'ltr' : 'rtl';
+  const effectivePreviewPayeeAlign = tafqeetLang === 'en'
+    ? (previewPayeeAlign === 'center' ? 'center' : 'left')
+    : (previewPayeeAlign === 'center' ? 'center' : 'right');
+
+  const effectivePreviewWordsDir = tafqeetLang === 'en' ? 'ltr' : 'rtl';
+  const effectivePreviewWordsAlign = tafqeetLang === 'en'
+    ? (previewWordsAlign === 'center' ? 'center' : 'left')
+    : (previewWordsAlign === 'center' ? 'center' : 'right');
 
   const previewAmountLeft = previewCoords.amount.left;
   const previewAmountTop = previewCoords.amount.top;
@@ -333,6 +368,8 @@ export function IssueChequeForm({
     if (saveAsBeneficiary && !selectedBeneficiaryId) {
       onAddNewBeneficiary({
         nameAr: beneficiaryName.trim(),
+        nameEn: tafqeetLang === 'en' ? beneficiaryName.trim() : undefined,
+        preferredPrintLang: tafqeetLang,
         bankAccountId: effectiveAccountId,
         category: 'vendor',
         status: 'active',
@@ -486,11 +523,37 @@ export function IssueChequeForm({
                   <option value="">اختيار من سجل المستفيدين ({beneficiaries.length})...</option>
                   {beneficiaries.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.nameAr} ({b.category})
+                      {b.preferredPrintLang === 'en' ? `[EN] ${b.nameEn || b.nameAr}` : `[عربي] ${b.nameAr}`} ({b.category})
                     </option>
                   ))}
                 </select>
               </div>
+
+              {selectedBeneficiaryId && (() => {
+                const b = beneficiaries.find((x) => x.id === selectedBeneficiaryId);
+                if (!b) return null;
+                const isEn = (b.preferredPrintLang || 'ar') === 'en';
+                return (
+                  <div className="mb-2 p-2 rounded-xl bg-blue-50/80 border border-blue-200/80 text-[11px] flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-blue-950 font-bold">
+                      <Languages className="w-3.5 h-3.5 text-blue-600" />
+                      <span>لغة الطباعة المعتمدة في سجل المستفيد:</span>
+                      {isEn ? (
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black">
+                          الإنجليزية (English)
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black">
+                          العربية (يمين)
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-blue-600 font-medium">
+                      تم اختيار الاسم واللغة تلقائياً — ويمكنك التبديل يدوياً
+                    </span>
+                  </div>
+                );
+              })()}
               <input
                 type="text"
                 required
@@ -729,21 +792,25 @@ export function IssueChequeForm({
               {/* 2. حقل المستفيد PAYEE */}
               <div 
                 className="absolute flex items-center font-serif font-black text-slate-950 px-1 z-10 overflow-hidden"
-                dir="rtl"
+                dir={effectivePreviewPayeeDir}
                 style={{
                   left: `${(previewPayeeLeft / currentWidthMm) * 100}%`,
                   top: `${(previewPayeeTop / currentHeightMm) * 100}%`,
                   width: `${(previewPayeeWidth / currentWidthMm) * 100}%`,
                   height: `${(previewPayeeHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewPayeeFontSize}px`,
-                  justifyContent: previewPayeeAlign === 'right' ? 'flex-start' : previewPayeeAlign === 'left' ? 'flex-end' : 'center',
+                  justifyContent: effectivePreviewPayeeAlign === 'right' 
+                    ? (effectivePreviewPayeeDir === 'rtl' ? 'flex-start' : 'flex-end') 
+                    : (effectivePreviewPayeeAlign === 'left' 
+                      ? (effectivePreviewPayeeDir === 'rtl' ? 'flex-end' : 'flex-start') 
+                      : 'center'),
                 }}
-                title="اسم المستفيد"
+                title="اسم المستفيد (PAYEE)"
               >
                 <span 
-                  style={{ textAlign: previewPayeeAlign }}
+                  style={{ textAlign: effectivePreviewPayeeAlign, direction: effectivePreviewPayeeDir }}
                   className={`truncate block w-full font-serif font-black text-slate-950 ${
-                    previewPayeeAlign === 'right' ? 'text-right' : previewPayeeAlign === 'left' ? 'text-left' : 'text-center'
+                    effectivePreviewPayeeAlign === 'right' ? 'text-right' : effectivePreviewPayeeAlign === 'left' ? 'text-left' : 'text-center'
                   }`}
                 >
                   {beneficiaryName || '...................................................'}
@@ -753,22 +820,26 @@ export function IssueChequeForm({
               {/* 3. حقل التفقيط WORDS */}
               <div 
                 className="absolute flex items-center font-sans font-bold text-slate-900 px-1 z-10 overflow-hidden"
-                dir="rtl"
+                dir={effectivePreviewWordsDir}
                 style={{
                   left: `${(previewWordsLeft / currentWidthMm) * 100}%`,
                   top: `${(previewWordsTop / currentHeightMm) * 100}%`,
                   width: `${(previewWordsWidth / currentWidthMm) * 100}%`,
                   height: `${(previewWordsHeight / currentHeightMm) * 100}%`,
                   fontSize: `${previewWordsFontSize}px`,
-                  justifyContent: previewWordsAlign === 'right' ? 'flex-start' : previewWordsAlign === 'left' ? 'flex-end' : 'center',
+                  justifyContent: effectivePreviewWordsAlign === 'right' 
+                    ? (effectivePreviewWordsDir === 'rtl' ? 'flex-start' : 'flex-end') 
+                    : (effectivePreviewWordsAlign === 'left' 
+                      ? (effectivePreviewWordsDir === 'rtl' ? 'flex-end' : 'flex-start') 
+                      : 'center'),
                 }}
-                title="المبلغ كتابة (التفقيط)"
+                title="المبلغ كتابة (WORDS)"
               >
                 <span 
                   className={`line-clamp-2 break-words block w-full text-slate-950 font-serif font-bold leading-tight max-h-full overflow-hidden ${
-                    previewWordsAlign === 'right' ? 'text-right' : previewWordsAlign === 'left' ? 'text-left' : 'text-center'
+                    effectivePreviewWordsAlign === 'right' ? 'text-right' : effectivePreviewWordsAlign === 'left' ? 'text-left' : 'text-center'
                   }`}
-                  style={{ fontSize: `${previewWordsFontSize}px`, lineHeight: 1.2, textAlign: previewWordsAlign }}
+                  style={{ fontSize: `${previewWordsFontSize}px`, lineHeight: 1.2, textAlign: effectivePreviewWordsAlign, direction: effectivePreviewWordsDir }}
                 >
                   {amountInWords || '...................................................'}
                 </span>

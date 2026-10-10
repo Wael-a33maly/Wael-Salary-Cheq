@@ -3,6 +3,7 @@ import { Branch, Department, Employee } from '../types';
 
 export interface ParsedEmployeeRow {
   index: number;
+  jobNumber?: string;
   civilId: string;
   fullName: string;
   branchName: string;
@@ -24,6 +25,7 @@ export interface ParsedEmployeeRow {
 }
 
 export const EMPLOYEE_TEMPLATE_COLUMNS = [
+  'الرقم الوظيفي',
   'الرقم المدني (12 رقماً)',
   'اسم الموظف بالكامل',
   'الفرع',
@@ -75,6 +77,7 @@ export function exportEmployeeImportTemplate(
     // Template with illustrative sample rows
     const sampleRows = [
       {
+        'الرقم الوظيفي': 'EMP-1001',
         'الرقم المدني (12 رقماً)': '294051201234',
         'اسم الموظف بالكامل': 'أحمد محمد عبد الله الكندري',
         'الفرع': defaultBranchName,
@@ -88,6 +91,7 @@ export function exportEmployeeImportTemplate(
         'الحالة (نشط / موقوف)': 'نشط',
       },
       {
+        'الرقم الوظيفي': 'EMP-1002',
         'الرقم المدني (12 رقماً)': '288112304567',
         'اسم الموظف بالكامل': 'محمود حسن علي المصري',
         'الفرع': defaultBranchName,
@@ -105,6 +109,7 @@ export function exportEmployeeImportTemplate(
   }
 
   wsData['!cols'] = [
+    { wch: 18 }, // الرقم الوظيفي
     { wch: 22 }, // الرقم المدني
     { wch: 32 }, // اسم الموظف
     { wch: 24 }, // الفرع
@@ -262,6 +267,31 @@ export function parseEmployeesFromExcel(
   const parsedRows: ParsedEmployeeRow[] = [];
 
   rawRows.forEach((row, idx) => {
+    // 0. Job Number (الرقم الوظيفي / كود الموظف)
+    const rawJobNumber = findColValue(row, [
+      'الرقم الوظيفي (كود الموظف)',
+      'الرقم الوظيفي',
+      'الرقم_الوظيفي',
+      'رقم وظيفي',
+      'كود الموظف',
+      'كود_الموظف',
+      'رقم الموظف',
+      'رقم الملف',
+      'ملف الموظف',
+      'jobNumber',
+      'job_number',
+      'employeeCode',
+      'employee_code',
+      'emp_code',
+      'empCode',
+      'empId',
+      'staffId',
+      'staff_id',
+      'file_no',
+      'fileNo',
+    ]);
+    const cleanJobNumber = String(rawJobNumber || '').trim();
+
     // 1. Civil ID
     const rawCivilId = findColValue(row, [
       'الرقم المدني (12 رقماً)',
@@ -434,6 +464,7 @@ export function parseEmployeesFromExcel(
 
     parsedRows.push({
       index: idx + 1,
+      jobNumber: cleanJobNumber || (cleanCivilId ? `EMP-${cleanCivilId.slice(-4)}` : undefined),
       civilId: cleanCivilId || '290000000000',
       fullName: cleanName,
       branchName: matchedBranch?.name || defaultBranchName,

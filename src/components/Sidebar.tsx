@@ -37,6 +37,7 @@ export const REPORTS_SUB_ITEMS = [
   { id: 5, title: '5. كشف استقطاعات السلف', icon: Coins },
   { id: 6, title: '6. تقرير انتهاء الإقامات', icon: AlertTriangle },
   { id: 7, title: '7. الأرشيف المالي للشهور', icon: Archive },
+  { id: 8, title: '8. كشف استحقاق الرواتب (صافي/وظيفي/بيان)', icon: FileSpreadsheet },
 ];
 
 interface SidebarProps {
@@ -83,7 +84,7 @@ export function Sidebar({
     { id: 'receipts', label: 'طباعة الإيصالات والأظرف', icon: Printer, badge: 'جديد' },
     { id: 'employees', label: 'الموظفون', icon: Users },
     { id: 'branches', label: 'الفروع والأقسام', icon: Building2 },
-    { id: 'reports', label: 'مركز التقارير (7 تقارير)', icon: FileText, alertBadge: residencyAlertCount },
+    { id: 'reports', label: 'مركز التقارير (8 تقارير)', icon: FileText, alertBadge: residencyAlertCount },
   ];
 
   const isPayrollActive = payrollSubItems.some((item) => item.id === activeTab);

@@ -80,7 +80,18 @@ export default function App() {
   const [users, setUsers] = useState<UserAccount[]>(() => {
     const saved = localStorage.getItem('payroll_users');
     if (saved !== null) {
-      try { return JSON.parse(saved); } catch { return INITIAL_USERS; }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.map((u: any) =>
+            u.username?.toLowerCase() === 'admin' && (u.password === 'Admin@2026!' || !u.password)
+              ? { ...u, password: '159357' }
+              : u
+          );
+          localStorage.setItem('payroll_users', JSON.stringify(updated));
+          return updated;
+        }
+      } catch { return INITIAL_USERS; }
     }
     return INITIAL_USERS;
   });
@@ -179,6 +190,7 @@ export default function App() {
       if (data.employees && data.employees.length > 0) {
         setEmployees(data.employees.map((e: any) => ({
           id: parseInt(e.id, 10),
+          jobNumber: e.job_number || e.jobNumber || (e.civil_id ? `EMP-${e.civil_id.slice(-4)}` : undefined),
           civilId: e.civil_id,
           fullName: e.name || e.full_name || '',
           branchId: parseInt(e.branch_id, 10),
@@ -191,6 +203,27 @@ export default function App() {
           residenceExpiryDate: e.residence_expiry_date || '',
           status: e.status === 'inactive' || e.status === 'suspended' || e.status === 'resigned' ? 'inactive' : 'active',
         })));
+      }
+      if (data.users && data.users.length > 0) {
+        setUsers((prev) => {
+          // Merge remote users with any local passwords if already present
+          const remoteMapped: UserAccount[] = data.users!.map((u: any) => {
+            const existing = prev.find((p) => p.username.toLowerCase() === (u.username || '').toLowerCase());
+            return {
+              id: parseInt(u.id, 10),
+              username: u.username,
+              fullName: u.fullName || u.full_name || u.username,
+              email: u.email || existing?.email || '',
+              password: existing?.password || '159357',
+              role: (u.role === 'super_admin' ? 'admin' : u.role) || 'accountant',
+              status: u.status || 'active',
+              branchId: u.branchId ? parseInt(u.branchId, 10) : null,
+              createdAt: u.createdAt || '',
+            };
+          });
+          localStorage.setItem('payroll_users', JSON.stringify(remoteMapped));
+          return remoteMapped;
+        });
       }
       if (data.payrolls && data.payrolls.length > 0) {
         setSavedPayrolls(data.payrolls);
@@ -333,13 +366,52 @@ export default function App() {
       username: u.username || 'user',
       fullName: u.fullName || 'مستخدم جديد',
       email: u.email || 'user@company.com',
+      password: u.password || '159357',
       role: u.role || 'accountant',
       status: u.status || 'active',
       branchId: u.branchId || null,
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
     };
-    setUsers((prev) => [...prev, newUser]);
+    setUsers((prev) => {
+      const next = [...prev, newUser];
+      localStorage.setItem('payroll_users', JSON.stringify(next));
+      dbService.saveUsersToDb(next).catch(() => {});
+      return next;
+    });
     addAuditLog('USER_CREATE', 'users', `إنشاء مستخدم جديد: ${newUser.username} (${newUser.role})`);
+  };
+
+  const handleUpdateUser = (updatedUser: UserAccount) => {
+    setUsers((prev) => {
+      const next = prev.map((u) => (u.id === updatedUser.id ? updatedUser : u));
+      localStorage.setItem('payroll_users', JSON.stringify(next));
+      dbService.saveUsersToDb(next).catch(() => {});
+      return next;
+    });
+    if (currentUser && currentUser.id === updatedUser.id) {
+      const updatedCurrent = {
+        ...currentUser,
+        username: updatedUser.username,
+        fullName: updatedUser.fullName,
+        role: updatedUser.role,
+      };
+      setCurrentUser(updatedCurrent);
+      try {
+        sessionStorage.setItem('payroll_auth_user', JSON.stringify(updatedCurrent));
+      } catch {}
+    }
+    addAuditLog('USER_UPDATE', 'users', `تحديث بيانات المستخدم: ${updatedUser.username} (${updatedUser.fullName}) - البريد: ${updatedUser.email}`);
+  };
+
+  const handleDeleteUser = (userId: number) => {
+    const target = users.find((u) => u.id === userId);
+    setUsers((prev) => {
+      const next = prev.filter((u) => u.id !== userId);
+      localStorage.setItem('payroll_users', JSON.stringify(next));
+      dbService.saveUsersToDb(next).catch(() => {});
+      return next;
+    });
+    addAuditLog('USER_DELETE', 'users', `حذف مستخدم: ${target?.username || userId}`);
   };
 
   // Payroll save handler
@@ -703,6 +775,19 @@ export default function App() {
     addAuditLog('SETTINGS_UPDATE', 'settings', 'تحديث إعدادات الشركة والمعاملات المالية');
   };
 
+  const handleClearAuditLogs = async () => {
+    setAuditLogs([]);
+    localStorage.setItem('payroll_audit_logs', JSON.stringify([]));
+    await dbService.clearAuditLogsInDb();
+  };
+
+  const handleDeleteAuditLog = async (id: number | string) => {
+    const updated = auditLogs.filter((l) => l.id !== id);
+    setAuditLogs(updated);
+    localStorage.setItem('payroll_audit_logs', JSON.stringify(updated));
+    await dbService.deleteAuditLogItemInDb(id);
+  };
+
   // Urgent residency alerts count
   const residencyAlertCount = employees.filter((e) => {
     const st = getResidenceStatus(e.residenceExpiryDate, settings.residenceAlertDays);
@@ -899,7 +984,10 @@ export default function App() {
             <UsersView
               users={users}
               branches={branches}
+              currentUserId={currentUser?.id}
               onAddUser={handleAddUser}
+              onUpdateUser={handleUpdateUser}
+              onDeleteUser={handleDeleteUser}
             />
           )}
 
@@ -918,6 +1006,8 @@ export default function App() {
               dataCounts={dataCounts}
               onResetData={handleResetData}
               onRestoreBackup={handleRestoreBackup}
+              onClearAuditLogs={handleClearAuditLogs}
+              onDeleteAuditLog={handleDeleteAuditLog}
             />
           )}
         </main>

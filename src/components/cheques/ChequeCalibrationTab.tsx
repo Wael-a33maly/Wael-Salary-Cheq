@@ -128,6 +128,7 @@ export function ChequeCalibrationTab({
   // Test Print modal & settings
   const [isTestPrintModalOpen, setIsTestPrintModalOpen] = useState(false);
   const [testPrintMode, setTestPrintMode] = useState<'a4_alignment' | 'real_cheque_text_only' | 'with_bg'>('a4_alignment');
+  const [calibLanguage, setCalibLanguage] = useState<'ar' | 'en'>('ar');
   const [testChequeData, setTestChequeData] = useState({
     date: '25/04/2026',
     payee: 'شركة البادية للمقاولات والتجارة العامة ذ.م.م',
@@ -181,6 +182,40 @@ export function ChequeCalibrationTab({
   const amountHeight = amountField.height;
   const amountFontSize = amountField.fontSize;
   const amountAlign = amountField.align;
+
+  // Language-aware automatic alignment: English defaults to Left, Arabic defaults to Right
+  const effectiveCalibPayeeDir = calibLanguage === 'en' ? 'ltr' : 'rtl';
+  const effectiveCalibPayeeAlign = calibLanguage === 'en'
+    ? (payeeAlign === 'center' ? 'center' : 'left')
+    : (payeeAlign === 'center' ? 'center' : 'right');
+
+  const effectiveCalibWordsDir = calibLanguage === 'en' ? 'ltr' : 'rtl';
+  const effectiveCalibWordsAlign = calibLanguage === 'en'
+    ? (wordsAlign === 'center' ? 'center' : 'left')
+    : (wordsAlign === 'center' ? 'center' : 'right');
+
+  const handleLanguageToggle = (lang: 'ar' | 'en') => {
+    setCalibLanguage(lang);
+    const newAlign = lang === 'en' ? 'left' : 'right';
+    setCalibration((prev) => ({
+      ...prev,
+      payeeAlign: newAlign,
+      wordsAlign: newAlign,
+    }));
+    if (lang === 'en') {
+      setTestChequeData((prev) => ({
+        ...prev,
+        payee: 'AL-BADIA CONTRACTING & GENERAL TRADING CO. W.L.L',
+        words: 'Only Three Thousand Five Hundred Kuwaiti Dinars #',
+      }));
+    } else {
+      setTestChequeData((prev) => ({
+        ...prev,
+        payee: 'شركة البادية للمقاولات والتجارة العامة ذ.م.م',
+        words: 'فقط ثلاثة آلاف وخمسمائة دينار كويتي لا غير #',
+      }));
+    }
+  };
 
   const handleTriggerPrint = () => {
     try {
@@ -315,11 +350,11 @@ export function ChequeCalibrationTab({
               height: ${payeeHeight}mm;
               line-height: ${payeeHeight}mm;
               font-size: ${payeeFontSize}px;
-              font-family: serif, 'Cairo', sans-serif;
+              font-family: ${calibLanguage === 'en' ? 'sans-serif, Arial' : 'serif, "Cairo", sans-serif'};
               font-weight: 900;
               color: #000;
-              text-align: ${payeeAlign};
-              direction: rtl;
+              text-align: ${effectiveCalibPayeeAlign};
+              direction: ${effectiveCalibPayeeDir};
               white-space: nowrap;
               overflow: hidden;
               box-sizing: border-box;
@@ -334,11 +369,11 @@ export function ChequeCalibrationTab({
               width: ${wordsWidth}mm;
               height: ${wordsHeight}mm;
               font-size: ${wordsFontSize}px;
-              font-family: 'Cairo', sans-serif;
+              font-family: ${calibLanguage === 'en' ? 'sans-serif, Arial' : '"Cairo", sans-serif'};
               font-weight: 900;
               color: #000;
-              text-align: ${wordsAlign};
-              direction: rtl;
+              text-align: ${effectiveCalibWordsAlign};
+              direction: ${effectiveCalibWordsDir};
               line-height: 1.25;
               overflow: hidden;
               box-sizing: border-box;
@@ -799,7 +834,7 @@ export function ChequeCalibrationTab({
     switch (field) {
       case 'date':
         return {
-          title: 'حقل التاريخ',
+          title: 'التاريخ (DATE)',
           x: dateLeft,
           y: dateTop,
           w: dateWidth,
@@ -810,7 +845,7 @@ export function ChequeCalibrationTab({
         };
       case 'payee':
         return {
-          title: 'حقل اسم المستفيد',
+          title: 'المستفيد (PAYEE)',
           x: payeeLeft,
           y: payeeTop,
           w: payeeWidth,
@@ -821,7 +856,7 @@ export function ChequeCalibrationTab({
         };
       case 'words':
         return {
-          title: 'حقل المبلغ كتابة (التفقيط)',
+          title: 'التفقيط (WORDS)',
           x: wordsLeft,
           y: wordsTop,
           w: wordsWidth,
@@ -832,7 +867,7 @@ export function ChequeCalibrationTab({
         };
       case 'amount':
         return {
-          title: 'حقل المبلغ بالأرقام',
+          title: 'المبلغ رقماً (AMOUNT)',
           x: amountLeft,
           y: amountTop,
           w: amountWidth,
@@ -1168,6 +1203,34 @@ export function ChequeCalibrationTab({
                   125%
                 </button>
               </div>
+
+              {/* Language Preview Toggle (عربي محاذاة لليمين / English محاذاة لليسار) */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px]" title="تبديل لغة المعاينة: محاذاة تلقائية لليسار بالإنجليزية، أو لليمين بالعربية">
+                <button
+                  type="button"
+                  onClick={() => handleLanguageToggle('ar')}
+                  className={`px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1 ${
+                    calibLanguage === 'ar'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="معاينة بالعربية: محاذاة تلقائية لليمين للمستفيد والتفقيط"
+                >
+                  <span>عربي (يمين)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLanguageToggle('en')}
+                  className={`px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1 ${
+                    calibLanguage === 'en'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="معاينة بالإنجليزية: محاذاة تلقائية لليسار للمستفيد والتفقيط"
+                >
+                  <span>English (يسار)</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1372,11 +1435,11 @@ export function ChequeCalibrationTab({
                       width: `${toWidthPct(dateWidth)}%`,
                       height: `${toHeightPct(dateHeight)}%`,
                     }}
-                    title="حقل التاريخ (اسحب من الحواف أو الزوايا لتغيير الحجم)"
+                    title="التاريخ (DATE) - اسحب من الحواف أو الزوايا لتغيير الحجم"
                   >
                     {/* Floating Label Badge Outside Box */}
                     <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-blue-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
-                      التاريخ
+                      التاريخ (DATE)
                     </span>
 
                     {/* Content strictly within field bounds */}
@@ -1409,22 +1472,34 @@ export function ChequeCalibrationTab({
                       width: `${toWidthPct(payeeWidth)}%`,
                       height: `${toHeightPct(payeeHeight)}%`,
                     }}
-                    title="اسم المستفيد (اسحب من الحواف أو الزوايا لتغيير الحجم)"
+                    title="المستفيد (PAYEE) - اسحب من الحواف أو الزوايا لتغيير الحجم"
                   >
                     {/* Floating Label Badge Outside Box */}
                     <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-emerald-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
-                      اسم المستفيد
+                      المستفيد (PAYEE)
                     </span>
 
                     {/* Content strictly within field bounds */}
-                    <div className="w-full h-full flex items-center font-serif font-black text-slate-950 overflow-hidden px-1 select-none" dir="rtl" style={{ justifyContent: payeeAlign === 'right' ? 'flex-start' : payeeAlign === 'left' ? 'flex-end' : 'center' }}>
+                    <div 
+                      className="w-full h-full flex items-center font-serif font-black text-slate-950 overflow-hidden px-1 select-none" 
+                      dir={effectiveCalibPayeeDir} 
+                      style={{ 
+                        justifyContent: effectiveCalibPayeeAlign === 'right' 
+                          ? (effectiveCalibPayeeDir === 'rtl' ? 'flex-start' : 'flex-end') 
+                          : (effectiveCalibPayeeAlign === 'left' 
+                            ? (effectiveCalibPayeeDir === 'rtl' ? 'flex-end' : 'flex-start') 
+                            : 'center') 
+                      }}
+                    >
                       <span 
-                        style={{ fontSize: `${payeeFontSize}px`, textAlign: payeeAlign }}
+                        style={{ fontSize: `${payeeFontSize}px`, textAlign: effectiveCalibPayeeAlign, direction: effectiveCalibPayeeDir }}
                         className={`truncate block w-full font-black text-slate-950 ${
-                          payeeAlign === 'right' ? 'text-right' : payeeAlign === 'left' ? 'text-left' : 'text-center'
+                          effectiveCalibPayeeAlign === 'right' ? 'text-right' : effectiveCalibPayeeAlign === 'left' ? 'text-left' : 'text-center'
                         }`}
                       >
-                        شركة البادية للمقاولات والتجارة العامة ذ.م.م
+                        {calibLanguage === 'en'
+                          ? 'AL-BADIA CONTRACTING & GENERAL TRADING CO. W.L.L'
+                          : 'شركة البادية للمقاولات والتجارة العامة ذ.م.م'}
                       </span>
                     </div>
 
@@ -1446,22 +1521,34 @@ export function ChequeCalibrationTab({
                       width: `${toWidthPct(wordsWidth)}%`,
                       height: `${toHeightPct(wordsHeight)}%`,
                     }}
-                    title="التفقيط (إذا زاد يتم وضعه على سطرين داخل حيز الحقل)"
+                    title="التفقيط (WORDS) - إذا زاد يتم وضعه على سطرين داخل حيز الحقل"
                   >
                     {/* Floating Label Badge Outside Box */}
                     <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-purple-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
-                      التفقيط (سطران عند الزيادة)
+                      التفقيط (WORDS)
                     </span>
 
                     {/* Content strictly within field bounds on up to 2 lines */}
-                    <div className="w-full h-full flex items-center overflow-hidden px-1 select-none" dir="rtl" style={{ justifyContent: wordsAlign === 'right' ? 'flex-start' : wordsAlign === 'left' ? 'flex-end' : 'center' }}>
+                    <div 
+                      className="w-full h-full flex items-center overflow-hidden px-1 select-none" 
+                      dir={effectiveCalibWordsDir} 
+                      style={{ 
+                        justifyContent: effectiveCalibWordsAlign === 'right' 
+                          ? (effectiveCalibWordsDir === 'rtl' ? 'flex-start' : 'flex-end') 
+                          : (effectiveCalibWordsAlign === 'left' 
+                            ? (effectiveCalibWordsDir === 'rtl' ? 'flex-end' : 'flex-start') 
+                            : 'center') 
+                      }}
+                    >
                       <span 
-                        style={{ fontSize: `${wordsFontSize}px`, lineHeight: 1.2, textAlign: wordsAlign }}
+                        style={{ fontSize: `${wordsFontSize}px`, lineHeight: 1.2, textAlign: effectiveCalibWordsAlign, direction: effectiveCalibWordsDir }}
                         className={`line-clamp-2 break-words font-serif font-bold text-slate-950 w-full max-h-full overflow-hidden ${
-                          wordsAlign === 'right' ? 'text-right' : wordsAlign === 'left' ? 'text-left' : 'text-center'
+                          effectiveCalibWordsAlign === 'right' ? 'text-right' : effectiveCalibWordsAlign === 'left' ? 'text-left' : 'text-center'
                         }`}
                       >
-                        فقط خمسة وعشرون ألف وثلاثمائة وسبعون دينار كويتي وخمسمائة فلس لا غير #
+                        {calibLanguage === 'en'
+                          ? 'Only Three Thousand Five Hundred Kuwaiti Dinars and 000/1000 Only #'
+                          : 'فقط ثلاثة آلاف وخمسمائة دينار كويتي وخمسمائة فلس لا غير #'}
                       </span>
                     </div>
 
@@ -1483,11 +1570,11 @@ export function ChequeCalibrationTab({
                       width: `${toWidthPct(amountWidth)}%`,
                       height: `${toHeightPct(amountHeight)}%`,
                     }}
-                    title="المبلغ بالأرقام محصوراً بين علامتي #"
+                    title="المبلغ رقماً (AMOUNT) محصوراً بين علامتي #"
                   >
                     {/* Floating Label Badge Outside Box */}
                     <span className="absolute -top-4 right-0 text-[8px] font-sans font-bold bg-amber-600 text-white px-1.5 py-0.2 rounded shadow-2xs pointer-events-none select-none z-30">
-                      المبلغ (#...#)
+                      المبلغ رقماً (AMOUNT)
                     </span>
 
                     {/* Content strictly within field bounds formatted between # */}
@@ -1874,7 +1961,7 @@ export function ChequeCalibrationTab({
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                <span>التاريخ</span>
+                <span>التاريخ (DATE)</span>
               </button>
 
               <button
@@ -1887,7 +1974,7 @@ export function ChequeCalibrationTab({
                 }`}
               >
                 <User className="w-3.5 h-3.5" />
-                <span>المستفيد</span>
+                <span>المستفيد (PAYEE)</span>
               </button>
 
               <button
@@ -1900,7 +1987,7 @@ export function ChequeCalibrationTab({
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>التفقيط</span>
+                <span>التفقيط (WORDS)</span>
               </button>
 
               <button
@@ -1913,7 +2000,7 @@ export function ChequeCalibrationTab({
                 }`}
               >
                 <DollarSign className="w-3.5 h-3.5" />
-                <span>المبلغ بالأرقام (د.ك)</span>
+                <span>المبلغ رقماً (AMOUNT)</span>
               </button>
             </div>
           </div>
@@ -2008,29 +2095,36 @@ export function ChequeCalibrationTab({
                 </div>
 
                 {/* Text Alignment (محاذاة النص داخل الحقل) */}
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <AlignLeft className="w-3.5 h-3.5 text-slate-600" />
-                    <span className="text-[11px] font-bold text-slate-700">محاذاة النص (Align)</span>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <AlignLeft className="w-3.5 h-3.5 text-slate-600" />
+                      <span className="text-[11px] font-bold text-slate-700">محاذاة النص (Align)</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {(selectedField === 'payee' || selectedField === 'words')
+                        ? (calibLanguage === 'en' ? 'تلقائي: يسار (English)' : 'تلقائي: يمين (عربي)')
+                        : ''}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-300">
+                  <div className="flex items-center justify-between gap-1 bg-white p-0.5 rounded-lg border border-slate-300">
                     <button
                       type="button"
                       onClick={() => handleSetAlign(selectedField, 'right')}
-                      className={`px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                      className={`flex-1 py-1 rounded text-xs font-bold transition flex items-center justify-center gap-1 ${
                         getCurrentAlign(selectedField) === 'right'
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'text-slate-700 hover:bg-slate-100'
                       }`}
-                      title="محاذاة لليمين"
+                      title="محاذاة لليمين (تلقائي عند الطباعة بالعربية)"
                     >
                       <AlignRight className="w-3 h-3" />
-                      <span>يمين</span>
+                      <span>يمين {selectedField === 'payee' || selectedField === 'words' ? '(عربي)' : ''}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSetAlign(selectedField, 'center')}
-                      className={`px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                      className={`flex-1 py-1 rounded text-xs font-bold transition flex items-center justify-center gap-1 ${
                         getCurrentAlign(selectedField) === 'center'
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'text-slate-700 hover:bg-slate-100'
@@ -2043,17 +2137,22 @@ export function ChequeCalibrationTab({
                     <button
                       type="button"
                       onClick={() => handleSetAlign(selectedField, 'left')}
-                      className={`px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                      className={`flex-1 py-1 rounded text-xs font-bold transition flex items-center justify-center gap-1 ${
                         getCurrentAlign(selectedField) === 'left'
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'text-slate-700 hover:bg-slate-100'
                       }`}
-                      title="محاذاة لليسار"
+                      title="محاذاة لليسار (تلقائي عند الطباعة بالإنجليزية)"
                     >
                       <AlignLeft className="w-3 h-3" />
-                      <span>يسار</span>
+                      <span>يسار {selectedField === 'payee' || selectedField === 'words' ? '(English)' : ''}</span>
                     </button>
                   </div>
+                  {(selectedField === 'payee' || selectedField === 'words') && (
+                    <p className="text-[10px] text-amber-800 bg-amber-50/80 p-1.5 rounded-lg border border-amber-200 leading-snug">
+                      💡 <strong>محاذاة تلقائية:</strong> عند اختيار طباعة الشيك بالإنجليزي تكون المحاذاة من اليسار تلقائياً، وعند العربي تكون من اليمين داخل حيز ومساحة الحقل المحددة.
+                    </p>
+                  )}
                 </div>
 
                 {/* Live Real-World Position Info */}
@@ -2311,7 +2410,29 @@ export function ChequeCalibrationTab({
 
               {/* Sample Cheque Data Inputs */}
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
-                <span className="text-xs font-bold text-slate-700 block">بيانات نموذج الاختبار:</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 block">بيانات نموذج الاختبار:</span>
+                  <div className="flex items-center bg-white p-0.5 rounded-lg border border-slate-300 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => handleLanguageToggle('ar')}
+                      className={`px-2 py-0.5 rounded font-bold transition ${
+                        calibLanguage === 'ar' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      عربي (يمين)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLanguageToggle('en')}
+                      className={`px-2 py-0.5 rounded font-bold transition ${
+                        calibLanguage === 'en' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      English (يسار)
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <span className="text-slate-500 text-[10px] block mb-1">اسم المستفيد:</span>
@@ -2453,7 +2574,7 @@ export function ChequeCalibrationTab({
 
         {/* FIELD 2: المستفيد PAYEE */}
         <div
-          dir="rtl"
+          dir={effectiveCalibPayeeDir}
           style={{
             position: 'absolute',
             left: `${payeeLeft}mm`,
@@ -2461,15 +2582,19 @@ export function ChequeCalibrationTab({
             width: `${payeeWidth}mm`,
             height: `${payeeHeight}mm`,
             fontSize: `${payeeFontSize}pt`,
-            fontFamily: 'sans-serif',
+            fontFamily: calibLanguage === 'en' ? 'sans-serif' : 'serif, "Cairo", sans-serif',
             fontWeight: 'bold',
             color: '#000000',
-            textAlign: payeeAlign,
+            textAlign: effectiveCalibPayeeAlign,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: payeeAlign === 'center' ? 'center' : payeeAlign === 'left' ? 'flex-end' : 'flex-start',
+            justifyContent: effectiveCalibPayeeAlign === 'right'
+              ? (effectiveCalibPayeeDir === 'rtl' ? 'flex-start' : 'flex-end')
+              : (effectiveCalibPayeeAlign === 'left'
+                ? (effectiveCalibPayeeDir === 'rtl' ? 'flex-end' : 'flex-start')
+                : 'center'),
             boxSizing: 'border-box',
             padding: '0 1mm',
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(16, 185, 129, 0.4)' : 'none',
@@ -2480,7 +2605,7 @@ export function ChequeCalibrationTab({
 
         {/* FIELD 3: التفقيط WORDS */}
         <div
-          dir="rtl"
+          dir={effectiveCalibWordsDir}
           style={{
             position: 'absolute',
             left: `${wordsLeft}mm`,
@@ -2488,14 +2613,18 @@ export function ChequeCalibrationTab({
             width: `${wordsWidth}mm`,
             height: `${wordsHeight}mm`,
             fontSize: `${wordsFontSize}pt`,
-            fontFamily: 'sans-serif',
+            fontFamily: calibLanguage === 'en' ? 'sans-serif' : '"Cairo", sans-serif',
             fontWeight: '600',
             color: '#000000',
-            textAlign: wordsAlign,
+            textAlign: effectiveCalibWordsAlign,
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: wordsAlign === 'center' ? 'center' : wordsAlign === 'left' ? 'flex-end' : 'flex-start',
+            justifyContent: effectiveCalibWordsAlign === 'right'
+              ? (effectiveCalibWordsDir === 'rtl' ? 'flex-start' : 'flex-end')
+              : (effectiveCalibWordsAlign === 'left'
+                ? (effectiveCalibWordsDir === 'rtl' ? 'flex-end' : 'flex-start')
+                : 'center'),
             boxSizing: 'border-box',
             padding: '0 1mm',
             border: testPrintMode === 'a4_alignment' ? '0.5px solid rgba(147, 51, 234, 0.4)' : 'none',
@@ -2510,7 +2639,8 @@ export function ChequeCalibrationTab({
               lineHeight: '1.25',
               width: '100%',
               wordBreak: 'break-word',
-              textAlign: wordsAlign,
+              textAlign: effectiveCalibWordsAlign,
+              direction: effectiveCalibWordsDir,
             }}
           >
             {testChequeData.words}

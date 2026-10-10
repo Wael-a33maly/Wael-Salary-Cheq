@@ -347,6 +347,34 @@ export function ChequePrintingModule({
     dbService.saveBankAccountsToDb(updatedList);
   };
 
+  // Delete Bank Account
+  const handleDeleteAccount = (accId: string) => {
+    const updatedList = bankAccounts.filter((a) => a.id !== accId);
+    setBankAccounts(updatedList);
+    dbService.saveBankAccountsToDb(updatedList);
+    dbService.deleteBankAccountFromDb(accId);
+    if (selectedAccountId === accId) {
+      setSelectedAccountId(updatedList[0]?.id || '');
+    }
+  };
+
+  // Delete Cheque Template from an account
+  const handleDeleteTemplate = (accId: string, templateId: string) => {
+    const updatedList = bankAccounts.map((a) => {
+      if (a.id !== accId) return a;
+      const tpls = (a.chequeTemplates || []).filter((t) => t.id !== templateId);
+      const newActiveTpl = a.activeTemplateId === templateId ? (tpls[0]?.id || '') : a.activeTemplateId;
+      return {
+        ...a,
+        chequeTemplates: tpls,
+        activeTemplateId: newActiveTpl,
+      };
+    });
+    setBankAccounts(updatedList);
+    dbService.saveBankAccountsToDb(updatedList);
+    dbService.deleteChequeTemplateFromDb(templateId);
+  };
+
   // Add Cheque Book
   const handleAddChequeBook = (book: Omit<ChequeBook, 'id'>) => {
     const newBk: ChequeBook = {
@@ -362,6 +390,13 @@ export function ChequePrintingModule({
     const updatedList = chequeBooks.map((b) => (b.id === updated.id ? updated : b));
     setChequeBooks(updatedList);
     dbService.saveChequeBooksToDb(updatedList);
+  };
+
+  const handleDeleteChequeBook = (bookId: string) => {
+    const updatedList = chequeBooks.filter((b) => b.id !== bookId);
+    setChequeBooks(updatedList);
+    dbService.saveChequeBooksToDb(updatedList);
+    dbService.deleteChequeBookFromDb(bookId);
   };
 
   // Quick navigation helpers
@@ -572,8 +607,11 @@ export function ChequePrintingModule({
           printSettings={printSettings}
           onAddAccount={handleAddAccount}
           onUpdateAccount={handleUpdateAccount}
+          onDeleteAccount={handleDeleteAccount}
+          onDeleteTemplate={handleDeleteTemplate}
           onAddChequeBook={handleAddChequeBook}
           onUpdateChequeBook={handleUpdateChequeBook}
+          onDeleteChequeBook={handleDeleteChequeBook}
           onUpdatePrintSettings={handleUpdatePrintSettings}
           onNavigateToCalibration={() => setCurrentSubTab('calibration')}
         />
@@ -586,6 +624,7 @@ export function ChequePrintingModule({
           bankAccount={
             bankAccounts.find((a) => a.id === printingCheque.bankAccountId) || bankAccounts[0]
           }
+          beneficiaries={beneficiaries}
           printSettings={printSettings}
           companyName={companyName}
           onUpdatePrintSettings={handleUpdatePrintSettings}

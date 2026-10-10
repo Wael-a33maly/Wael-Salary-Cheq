@@ -442,6 +442,8 @@ export function executeReconciliationEngine(
 
     if (bestA) {
       const a = bestA;
+      const aAmt = Math.abs(a.netAmount);
+      const bAmt = Math.abs(b.netAmount);
       const daysDiff = bestDaysDiff;
       const commissionAmount = bestCommission;
       const tidUsed = bestTid;

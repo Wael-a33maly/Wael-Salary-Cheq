@@ -974,7 +974,14 @@ export function PayrollView({
                     filteredRows.map((r) => (
                     <tr key={r.emp.id} className="hover:bg-slate-50/70 transition">
                       <td className="p-2.5">
-                        <div className="font-bold text-slate-900">{r.emp.fullName}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900">{r.emp.fullName}</span>
+                          {r.emp.jobNumber && (
+                            <span className="font-mono text-[10px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">
+                              {r.emp.jobNumber}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-slate-500">{r.branchName}</div>
                       </td>
 
@@ -1290,10 +1297,14 @@ export function PayrollView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
                 <div>
                   <span className="text-[10px] text-slate-500 block">اسم الموظف:</span>
                   <strong className="text-xs font-bold text-slate-900">{activePayslipEmployee.emp.fullName}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block">الرقم الوظيفي:</span>
+                  <strong className="text-xs font-mono text-blue-700 font-bold">{activePayslipEmployee.emp.jobNumber || '-'}</strong>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-500 block">الرقم المدني:</span>

@@ -32,8 +32,11 @@ interface ChequeBooksSettingsProps {
   printSettings: ChequePrintSettings;
   onAddAccount: (account: Omit<BankAccount, 'id'>) => void;
   onUpdateAccount: (account: BankAccount) => void;
+  onDeleteAccount?: (accountId: string) => void;
+  onDeleteTemplate?: (accountId: string, templateId: string) => void;
   onAddChequeBook: (book: Omit<ChequeBook, 'id'>) => void;
   onUpdateChequeBook: (book: ChequeBook) => void;
+  onDeleteChequeBook?: (bookId: string) => void;
   onUpdatePrintSettings: (settings: ChequePrintSettings) => void;
   onNavigateToCalibration?: () => void;
 }
@@ -44,8 +47,11 @@ export function ChequeBooksSettings({
   printSettings,
   onAddAccount,
   onUpdateAccount,
+  onDeleteAccount,
+  onDeleteTemplate,
   onAddChequeBook,
   onUpdateChequeBook,
+  onDeleteChequeBook,
   onUpdatePrintSettings,
   onNavigateToCalibration,
 }: ChequeBooksSettingsProps) {
@@ -381,10 +387,56 @@ export function ChequeBooksSettings({
   };
 
   const handleDeleteTemplate = (id: string) => {
-    setAccountForm((prev) => ({
-      ...prev,
-      chequeTemplates: prev.chequeTemplates.filter((t) => t.id !== id),
-    }));
+    if (accountForm.chequeTemplates.length <= 1) {
+      if (!window.confirm('هذا هو المقاس الوحيد للشيك في الحساب. هل تريد حذفه وإعادة تعيين مقاس قياسي بديل؟')) {
+        return;
+      }
+      setAccountForm((prev) => ({
+        ...prev,
+        chequeTemplates: [
+          {
+            id: `tpl-${Date.now()}-std`,
+            name: `مقاس شيك قياسي (${prev.chequeWidthCm || 18.0} × ${prev.chequeHeightCm || 9.0} سم)`,
+            widthCm: prev.chequeWidthCm || 18.0,
+            heightCm: prev.chequeHeightCm || 9.0,
+            isDefault: true,
+            notes: 'المقاس القياسي المعتمد',
+          }
+        ],
+      }));
+      return;
+    }
+    if (window.confirm('هل أنت متأكد من حذف مقاس الشيك المحدد؟')) {
+      setAccountForm((prev) => ({
+        ...prev,
+        chequeTemplates: prev.chequeTemplates.filter((t) => t.id !== id),
+      }));
+    }
+  };
+
+  // Delete Bank Account Handler
+  const handleDeleteAccountClick = (acc: BankAccount) => {
+    if (!onDeleteAccount) return;
+    const confirmMsg = `هل أنت متأكد من حذف الحساب البنكي:\n"${acc.bankName} - ${acc.accountName}"؟\nرقم الحساب: ${acc.accountNumber}\n\nسيتم حذف الحساب وقوالب مقاسات الشيكات المرتبطة به.`;
+    if (window.confirm(confirmMsg)) {
+      onDeleteAccount(acc.id);
+    }
+  };
+
+  // Delete Template directly from Account Card
+  const handleDeleteTemplateFromCard = (accId: string, templateId: string, templateName: string) => {
+    if (!onDeleteTemplate) return;
+    if (window.confirm(`هل أنت متأكد من حذف مقاس الشيك "${templateName}"؟`)) {
+      onDeleteTemplate(accId, templateId);
+    }
+  };
+
+  // Delete Cheque Book Handler
+  const handleDeleteBookClick = (bookId: string, bookName: string) => {
+    if (!onDeleteChequeBook) return;
+    if (window.confirm(`هل أنت متأكد من حذف دفتر الشيكات "${bookName}"؟`)) {
+      onDeleteChequeBook(bookId);
+    }
   };
 
   const handleSetDefaultTemplate = (id: string) => {
@@ -532,14 +584,24 @@ export function ChequeBooksSettings({
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditBook(book)}
-                      className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"
-                      title="تعديل الدفتر"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditBook(book)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"
+                        title="تعديل الدفتر"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBookClick(book.id, book.bookName)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition"
+                        title="حذف دفتر الشيكات"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Serial Details */}
@@ -625,14 +687,24 @@ export function ChequeBooksSettings({
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditAccount(acc)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                        title="تعديل الحساب ومقاسات الشيك"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditAccount(acc)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                          title="تعديل الحساب ومقاسات الشيك"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAccountClick(acc)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="حذف هذا الحساب ومقاسات شيكاته"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Dimensions & Template Badge */}
@@ -648,6 +720,69 @@ export function ChequeBooksSettings({
                         <span>{templatesCount} {templatesCount > 1 ? 'مقاسات شيكات' : 'مقاس شيك'}</span>
                       </div>
                     </div>
+
+                    {/* Detailed Cheque Templates list with Edit and Delete options */}
+                    {acc.chequeTemplates && acc.chequeTemplates.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                          <span>مقاسات وقوالب الشيكات ({acc.chequeTemplates.length}):</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleOpenEditAccount(acc);
+                              setActiveAccountTab('templates');
+                            }}
+                            className="text-purple-600 hover:text-purple-800 text-[10px] font-bold flex items-center gap-0.5"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>إضافة مقاس</span>
+                          </button>
+                        </div>
+                        <div className="space-y-1">
+                          {acc.chequeTemplates.map((tpl) => (
+                            <div
+                              key={tpl.id}
+                              className="flex items-center justify-between p-1.5 bg-white rounded-lg border border-slate-200/80 text-[11px]"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Ruler className="w-3 h-3 text-amber-500 shrink-0" />
+                                <span className="font-medium text-slate-800 truncate">{tpl.name}</span>
+                                <span className="text-slate-400 font-mono text-[10px] shrink-0">
+                                  ({tpl.widthCm}×{tpl.heightCm} سم)
+                                </span>
+                                {tpl.isDefault && (
+                                  <span className="bg-purple-100 text-purple-800 text-[9px] px-1 rounded font-bold shrink-0">
+                                    افتراضي
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 mr-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleOpenEditAccount(acc);
+                                    setActiveAccountTab('templates');
+                                    handleOpenEditTemplate(tpl);
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                                  title="تعديل هذا المقاس"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTemplateFromCard(acc.id, tpl.id, tpl.name)}
+                                  className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                  title="حذف هذا المقاس"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1158,16 +1293,14 @@ export function ChequeBooksSettings({
                               <Edit3 className="w-4 h-4" />
                             </button>
 
-                            {accountForm.chequeTemplates.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTemplate(tpl.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition"
-                                title="حذف المقاس"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTemplate(tpl.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition"
+                              title="حذف هذا المقاس"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))}

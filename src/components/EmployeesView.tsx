@@ -48,6 +48,7 @@ export function EmployeesView({
 
   // Form State for Add / Edit
   const [formData, setFormData] = useState({
+    jobNumber: '',
     fullName: '',
     civilId: '',
     branchId: 1,
@@ -62,7 +63,9 @@ export function EmployeesView({
   });
 
   const openAddModal = () => {
+    const nextJobNum = `EMP-${1000 + employees.length + 1}`;
     setFormData({
+      jobNumber: nextJobNum,
       fullName: '',
       civilId: '290000000000',
       branchId: branches[0]?.id || 1,
@@ -81,6 +84,7 @@ export function EmployeesView({
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
     setFormData({
+      jobNumber: emp.jobNumber || '',
       fullName: emp.fullName,
       civilId: emp.civilId,
       branchId: emp.branchId,
@@ -113,9 +117,11 @@ export function EmployeesView({
 
   // Filtered employees
   const filteredEmployees = employees.filter((emp) => {
+    const term = searchTerm.toLowerCase();
     const matchesSearch =
-      emp.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.civilId.includes(searchTerm);
+      emp.fullName.toLowerCase().includes(term) ||
+      emp.civilId.includes(term) ||
+      (emp.jobNumber && emp.jobNumber.toLowerCase().includes(term));
     const matchesBranch =
       selectedBranch === 'all' || emp.branchId.toString() === selectedBranch;
     const matchesStatus =
@@ -268,9 +274,16 @@ export function EmployeesView({
                   <tr key={emp.id} className="hover:bg-slate-50/80 transition">
                     {/* Employee & Civil ID */}
                     <td className="p-3.5">
-                      <div className="font-bold text-slate-900">{emp.fullName}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-900">{emp.fullName}</span>
+                        {emp.jobNumber && (
+                          <span className="font-mono text-[10px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">
+                            {emp.jobNumber}
+                          </span>
+                        )}
+                      </div>
                       <div className="font-mono text-[11px] text-slate-500">
-                        {emp.civilId}
+                        الرقم المدني: {emp.civilId}
                       </div>
                     </td>
 
@@ -366,10 +379,17 @@ export function EmployeesView({
             <div className="p-5 space-y-4 text-xs">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div>
-                  <h4 className="text-base font-bold text-slate-900">
-                    {selectedEmployeeForCard.fullName}
-                  </h4>
-                  <p className="text-slate-500 font-mono text-xs">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-bold text-slate-900">
+                      {selectedEmployeeForCard.fullName}
+                    </h4>
+                    {selectedEmployeeForCard.jobNumber && (
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-mono font-bold text-[11px] rounded border border-blue-200">
+                        {selectedEmployeeForCard.jobNumber}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-500 font-mono text-xs mt-0.5">
                     الرقم المدني: {selectedEmployeeForCard.civilId}
                   </p>
                 </div>
@@ -379,6 +399,20 @@ export function EmployeesView({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-slate-500 block text-[10px]">الرقم الوظيفي:</span>
+                  <strong className="text-blue-700 font-mono font-bold text-xs">
+                    {selectedEmployeeForCard.jobNumber || 'غير محدد'}
+                  </strong>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-slate-500 block text-[10px]">الرقم المدني:</span>
+                  <strong className="text-slate-800 font-mono font-bold text-xs">
+                    {selectedEmployeeForCard.civilId}
+                  </strong>
+                </div>
+
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">الفرع التابع له:</span>
                   <strong className="text-slate-800 font-bold">
@@ -487,6 +521,19 @@ export function EmployeesView({
 
               <div className="p-5 space-y-3 text-xs max-h-[80vh] overflow-y-auto">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">
+                      الرقم الوظيفي (كود الموظف):
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.jobNumber}
+                      onChange={(e) => setFormData({ ...formData, jobNumber: e.target.value })}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-xs font-mono font-bold text-blue-700"
+                      placeholder="مثال: EMP-1013"
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">الاسم الكامل (ثلاثي):</label>
                     <input

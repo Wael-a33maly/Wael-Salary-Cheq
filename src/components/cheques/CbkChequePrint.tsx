@@ -22,7 +22,7 @@ import {
   AlignCenter,
   AlignRight
 } from 'lucide-react';
-import { IssuedCheque, BankAccount, ChequeBook, ChequePrintSettings, ChequeSizeTemplate } from '../../types';
+import { IssuedCheque, BankAccount, ChequeBook, Beneficiary, ChequePrintSettings, ChequeSizeTemplate } from '../../types';
 import { tafqeetKwd, tafqeetKwdEn, formatChequeAmount } from '../../utils/tafqeetKwd';
 import { ChequeReceiptAndEnvelopeModal } from './ChequeReceiptAndEnvelopeModal';
 import { computeChequeFieldPositions } from '../../utils/chequeCoords';
@@ -31,6 +31,7 @@ interface CbkChequePrintProps {
   cheque: IssuedCheque;
   bankAccount: BankAccount;
   chequeBook?: ChequeBook;
+  beneficiaries?: Beneficiary[];
   printSettings: ChequePrintSettings;
   companyName?: string;
   onUpdatePrintSettings?: (settings: ChequePrintSettings) => void;
@@ -42,6 +43,7 @@ interface CbkChequePrintProps {
 export function CbkChequePrint({
   cheque,
   bankAccount,
+  beneficiaries,
   printSettings,
   companyName,
   onUpdatePrintSettings,
@@ -176,10 +178,48 @@ export function CbkChequePrint({
     }
   };
 
-  // Tafqeet Language: default to Arabic or English
-  const [printLanguage, setPrintLanguage] = useState<'ar' | 'en'>(
-    cheque.tafqeetLang || (/^[A-Za-z]/.test(cheque.beneficiaryName) ? 'en' : 'ar')
+  // Find related beneficiary if exists in directory
+  const relatedBeneficiary = beneficiaries?.find(
+    (b) => (cheque.beneficiaryId && b.id === cheque.beneficiaryId) || b.nameAr === cheque.beneficiaryName || b.nameEn === cheque.beneficiaryName
   );
+
+  // Priority order for initial print language:
+  // 1. Cheque's explicitly saved tafqeetLang
+  // 2. Beneficiary's preferredPrintLang registered in the beneficiary directory
+  // 3. Name character check (English letters -> 'en', Arabic -> 'ar')
+  const initialLang: 'ar' | 'en' = cheque.tafqeetLang 
+    || relatedBeneficiary?.preferredPrintLang 
+    || (/^[A-Za-z]/.test(cheque.beneficiaryName) ? 'en' : 'ar');
+  const [printLanguage, setPrintLanguage] = useState<'ar' | 'en'>(initialLang);
+
+  // Dynamic payee name:
+  // When printing in English: use beneficiary's English name if available, otherwise cheque.beneficiaryName
+  // When printing in Arabic: use beneficiary's Arabic name if available, otherwise cheque.beneficiaryName
+  const displayedPayeeName = (() => {
+    if (printLanguage === 'en') {
+      return relatedBeneficiary?.nameEn?.trim() || cheque.beneficiaryName;
+    }
+    return relatedBeneficiary?.nameAr?.trim() || cheque.beneficiaryName;
+  })();
+
+  // Automatic alignment according to language: English -> Left, Arabic -> Right
+  const effectivePayeeDir = printLanguage === 'en' ? 'ltr' : 'rtl';
+  const effectivePayeeAlign = printLanguage === 'en'
+    ? (payeeAlign === 'center' ? 'center' : 'left')
+    : (payeeAlign === 'center' ? 'center' : 'right');
+
+  const effectiveWordsDir = printLanguage === 'en' ? 'ltr' : 'rtl';
+  const effectiveWordsAlign = printLanguage === 'en'
+    ? (wordsAlign === 'center' ? 'center' : 'left')
+    : (wordsAlign === 'center' ? 'center' : 'right');
+
+  const handleLanguageChange = (newLang: 'ar' | 'en') => {
+    setPrintLanguage(newLang);
+    const newAlign = newLang === 'en' ? 'left' : 'right';
+    setPayeeAlign(newAlign);
+    setWordsAlign(newAlign);
+    saveQuickSettings({ payeeAlign: newAlign, wordsAlign: newAlign });
+  };
 
   // Receipt & Envelope Modal State
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -209,8 +249,8 @@ export function CbkChequePrint({
     offsetX: fineOffsetX,
     offsetY: fineOffsetY,
     dateAlign,
-    payeeAlign,
-    wordsAlign,
+    payeeAlign: effectivePayeeAlign,
+    wordsAlign: effectiveWordsAlign,
     amountAlign,
     payeeOffsetX,
     payeeOffsetY,
@@ -404,11 +444,11 @@ export function CbkChequePrint({
               height: ${payeeHeight}mm;
               line-height: ${payeeHeight}mm;
               font-size: ${payeeFontSize}px;
-              font-family: serif, 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+              font-family: ${printLanguage === 'en' ? 'sans-serif, Arial' : 'serif, "Cairo", "Segoe UI", Tahoma, sans-serif'};
               font-weight: 900;
               color: #000;
-              text-align: ${payeeAlign};
-              direction: rtl;
+              text-align: ${effectivePayeeAlign};
+              direction: ${effectivePayeeDir};
               white-space: nowrap;
               overflow: hidden;
               box-sizing: border-box;
@@ -422,11 +462,11 @@ export function CbkChequePrint({
               width: ${wordsWidth}mm;
               height: ${wordsHeight}mm;
               font-size: ${wordsFontSize}px;
-              font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+              font-family: ${printLanguage === 'en' ? 'sans-serif, Arial' : '"Cairo", "Segoe UI", Tahoma, sans-serif'};
               font-weight: bold;
               color: #000;
-              text-align: ${wordsAlign};
-              direction: rtl;
+              text-align: ${effectiveWordsAlign};
+              direction: ${effectiveWordsDir};
               line-height: 1.25;
               overflow: hidden;
               box-sizing: border-box;
@@ -459,7 +499,7 @@ export function CbkChequePrint({
             ${backgroundLayerHtml}
             ${crossingLayerHtml}
             <div class="date-field" dir="ltr">${formattedDate}</div>
-            <div class="payee-field">${cheque.beneficiaryName}</div>
+            <div class="payee-field">${displayedPayeeName}</div>
             <div class="words-field">${activeTafqeet}</div>
             <div class="amount-field">${formatChequeAmount(cheque.amount)}</div>
           </div>
@@ -582,33 +622,35 @@ export function CbkChequePrint({
               </div>
             )}
 
-            {/* Tafqeet Language */}
-            <div className="bg-slate-800 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-700">
+            {/* Cheque & Tafqeet Language (مع المحاذاة التلقائية) */}
+            <div className="bg-slate-800 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-700" title="اختيار لغة الشيك: محاذاة تلقائية لليمين للعربية، أو لليسار للإنجليزية">
               <span className="px-2 text-slate-400 flex items-center gap-1 text-[11px]">
                 <Languages className="w-3.5 h-3.5 text-amber-400" />
-                <span>التفقيط:</span>
+                <span>لغة الشيك:</span>
               </span>
               <button
                 type="button"
-                onClick={() => setPrintLanguage('ar')}
-                className={`px-2.5 py-1 rounded-lg transition text-xs ${
+                onClick={() => handleLanguageChange('ar')}
+                className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1 ${
                   printLanguage === 'ar'
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'text-slate-300 hover:text-white'
                 }`}
+                title="طباعة بالعربية مع محاذاة تلقائية لليمين في حيز المستفيد والتفقيط"
               >
-                عربي
+                <span>عربي (يمين)</span>
               </button>
               <button
                 type="button"
-                onClick={() => setPrintLanguage('en')}
-                className={`px-2.5 py-1 rounded-lg transition text-xs ${
+                onClick={() => handleLanguageChange('en')}
+                className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1 ${
                   printLanguage === 'en'
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'text-slate-300 hover:text-white'
                 }`}
+                title="طباعة بالإنجليزية مع محاذاة تلقائية لليسار في حيز المستفيد والتفقيط"
               >
-                English
+                <span>English (يسار)</span>
               </button>
             </div>
 
@@ -652,7 +694,12 @@ export function CbkChequePrint({
           <div className="flex items-center gap-4 flex-wrap">
             <div>
               <span className="text-slate-500">المستفيد: </span>
-              <strong className="text-slate-900 font-bold">{cheque.beneficiaryName}</strong>
+              <strong className="text-slate-900 font-bold">{displayedPayeeName}</strong>
+              {relatedBeneficiary && relatedBeneficiary.nameEn && relatedBeneficiary.nameAr && (
+                <span className="text-[10px] text-slate-400 mr-1.5">
+                  ({printLanguage === 'en' ? 'اسم إنجليزي' : 'اسم عربي'})
+                </span>
+              )}
             </div>
             <div>
               <span className="text-slate-500">تاريخ الاستحقاق: </span>
@@ -1370,18 +1417,26 @@ export function CbkChequePrint({
                 width: `${payeeWidth}mm`,
                 height: `${payeeHeight}mm`,
                 fontSize: `${payeeFontSize}px`,
-                justifyContent: payeeAlign === 'right' ? 'flex-start' : payeeAlign === 'left' ? 'flex-end' : 'center',
+                justifyContent: effectivePayeeAlign === 'right' 
+                  ? (effectivePayeeDir === 'rtl' ? 'flex-start' : 'flex-end') 
+                  : (effectivePayeeAlign === 'left' 
+                    ? (effectivePayeeDir === 'rtl' ? 'flex-end' : 'flex-start') 
+                    : 'center'),
               }}
               className="flex items-center px-1 z-10 overflow-hidden"
-              dir="rtl"
+              dir={effectivePayeeDir}
             >
               <span 
-                style={{ fontSize: `${payeeFontSize}px`, textAlign: payeeAlign }}
-                className={`truncate block w-full select-all print:text-black font-serif font-black ${
-                  payeeAlign === 'right' ? 'text-right' : payeeAlign === 'left' ? 'text-left' : 'text-center'
+                style={{ 
+                  fontSize: `${payeeFontSize}px`, 
+                  textAlign: effectivePayeeAlign, 
+                  direction: effectivePayeeDir 
+                }}
+                className={`truncate block w-full select-all print:text-black ${printLanguage === 'en' ? 'font-sans' : 'font-serif'} font-black ${
+                  effectivePayeeAlign === 'right' ? 'text-right' : effectivePayeeAlign === 'left' ? 'text-left' : 'text-center'
                 }`}
               >
-                {cheque.beneficiaryName}
+                {displayedPayeeName}
               </span>
             </div>
 
@@ -1394,16 +1449,24 @@ export function CbkChequePrint({
                 width: `${wordsWidth}mm`,
                 height: `${wordsHeight}mm`,
                 fontSize: `${wordsFontSize}px`,
-                justifyContent: wordsAlign === 'right' ? 'flex-start' : wordsAlign === 'left' ? 'flex-end' : 'center',
+                justifyContent: effectiveWordsAlign === 'right' 
+                  ? (effectiveWordsDir === 'rtl' ? 'flex-start' : 'flex-end') 
+                  : (effectiveWordsAlign === 'left' 
+                    ? (effectiveWordsDir === 'rtl' ? 'flex-end' : 'flex-start') 
+                    : 'center'),
               }}
               className="flex items-center px-1 z-10 overflow-hidden"
-              dir="rtl"
+              dir={effectiveWordsDir}
             >
               <span 
                 className={`line-clamp-2 break-words block w-full leading-tight select-all print:text-black font-sans font-bold max-h-full overflow-hidden ${
-                  wordsAlign === 'right' ? 'text-right' : wordsAlign === 'left' ? 'text-left' : 'text-center'
+                  effectiveWordsAlign === 'right' ? 'text-right' : effectiveWordsAlign === 'left' ? 'text-left' : 'text-center'
                 }`}
-                style={{ lineHeight: 1.25, textAlign: wordsAlign }}
+                style={{ 
+                  lineHeight: 1.25, 
+                  textAlign: effectiveWordsAlign, 
+                  direction: effectiveWordsDir 
+                }}
               >
                 {activeTafqeet}
               </span>

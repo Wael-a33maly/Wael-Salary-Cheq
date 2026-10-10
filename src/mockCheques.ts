@@ -1,5 +1,5 @@
 import { BankAccount, ChequeBook, Beneficiary, IssuedCheque, ChequePrintSettings, BeneficiaryCategory } from './types';
-import { tafqeetKwd } from './utils/tafqeetKwd';
+import { tafqeetKwd, tafqeetKwdEn } from './utils/tafqeetKwd';
 
 export const INITIAL_CHEQUE_PRINT_SETTINGS: ChequePrintSettings = {
   offsetX: 0,
@@ -237,6 +237,7 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     id: 'ben-1',
     nameAr: 'شركة الخليج للتجارة والمقاولات ذ.م.م',
     nameEn: 'Gulf Trading & Contracting Co. W.L.L',
+    preferredPrintLang: 'ar',
     bankAccountId: 'all',
     category: 'vendor',
     civilIdOrCR: '10492834',
@@ -251,6 +252,7 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     id: 'ben-2',
     nameAr: 'شركة أوتاد العقارية لإدارة المجمعات',
     nameEn: 'Awtad Real Estate Management',
+    preferredPrintLang: 'ar',
     bankAccountId: 'acc-cbk-main',
     category: 'company',
     civilIdOrCR: '20491823',
@@ -265,6 +267,7 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     id: 'ben-3',
     nameAr: 'المؤسسة العامة للتأمينات الاجتماعية',
     nameEn: 'Public Institution for Social Security (PIFSS)',
+    preferredPrintLang: 'ar',
     bankAccountId: 'all',
     category: 'government',
     civilIdOrCR: 'PIFSS-KW-GOV',
@@ -279,6 +282,7 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     id: 'ben-4',
     nameAr: 'المهندس أحمد فؤاد الشامي',
     nameEn: 'Eng. Ahmed Fouad Al-Shami',
+    preferredPrintLang: 'ar',
     bankAccountId: 'acc-cbk-main',
     category: 'individual',
     civilIdOrCR: '286041209384',
@@ -293,6 +297,7 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     id: 'ben-5',
     nameAr: 'شركة الغانم للمواد والتجهيزات التجارية',
     nameEn: 'Al-Ghanim Commercial Supplies',
+    preferredPrintLang: 'ar',
     bankAccountId: 'acc-cbk-main',
     category: 'vendor',
     civilIdOrCR: '39485712',
@@ -307,6 +312,7 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     id: 'ben-6',
     nameAr: 'وزارة التجارة والصناعة (دولة الكويت)',
     nameEn: 'Ministry of Commerce & Industry',
+    preferredPrintLang: 'ar',
     bankAccountId: 'all',
     category: 'government',
     civilIdOrCR: 'MOCI-KW-GOV',
@@ -321,6 +327,7 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     id: 'ben-7',
     nameAr: 'خالد عبد الرحمن المنصور',
     nameEn: 'Khaled Abdulrahman Al-Mansoor',
+    preferredPrintLang: 'ar',
     bankAccountId: 'all',
     category: 'employee',
     civilIdOrCR: '288120805678',
@@ -330,6 +337,21 @@ export const INITIAL_BENEFICIARIES: Beneficiary[] = [
     notes: 'مكافأة إنجاز تسويقية ومستحقات إدارية',
     status: 'active',
     createdAt: '2026-04-10',
+  },
+  {
+    id: 'ben-8',
+    nameAr: 'شركة مايكروسوفت العالمية للحلول التقنية',
+    nameEn: 'Microsoft Middle East & Gulf Solutions',
+    preferredPrintLang: 'en',
+    bankAccountId: 'all',
+    category: 'vendor',
+    civilIdOrCR: 'MS-CORP-9921',
+    bankName: 'سيتي بنك الكويت (Citibank)',
+    iban: 'KW90CITI000000009823412091',
+    phoneNumber: '+965 22003300',
+    notes: 'تراخيص البرمجيات والسحابة - طباعة الشيك باللغة الإنجليزية',
+    status: 'active',
+    createdAt: '2026-05-01',
   },
 ];
 
@@ -500,6 +522,28 @@ export const INITIAL_ISSUED_CHEQUES: IssuedCheque[] = [
     notes: 'مرفق إشعار المعاملة الوزارية',
     createdBy: 'admin',
     createdAt: '2026-09-18 10:45:00',
+  },
+  {
+    id: 'chk-100009',
+    bankAccountId: 'acc-cbk-main',
+    chequeBookId: 'cb-cbk-01',
+    chequeNumber: 100009,
+    chequeNumberStr: '00100009',
+    beneficiaryId: 'ben-8',
+    beneficiaryName: 'Microsoft Middle East & Gulf Solutions',
+    amount: 4500.000,
+    amountInWordsAr: tafqeetKwd(4500.000),
+    amountInWordsEn: tafqeetKwdEn(4500.000),
+    tafqeetLang: 'en',
+    issueDate: '2026-09-20',
+    dueDate: '2026-09-28',
+    status: 'issued', // لم يصرف بعد / معلق
+    isCrossed: true,
+    bearerCrossed: true,
+    purpose: 'اشتراكات وتراخيص الخدمات السحابية وأنظمة الخوادم',
+    notes: 'شيك باللغة الإنجليزية للمستفيد',
+    createdBy: 'admin',
+    createdAt: '2026-09-20 11:30:00',
   },
 
   // NBK Cheques

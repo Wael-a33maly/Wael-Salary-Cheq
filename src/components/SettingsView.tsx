@@ -53,6 +53,8 @@ interface SettingsViewProps {
   };
   onResetData?: (selectedKeys: string[], wipeRemoteDb: boolean, preserveChequeImages?: boolean) => Promise<{ success: boolean; message?: string; wiped?: string[] } | null | void>;
   onRestoreBackup?: (backupData: any, restoreToRemoteDb?: boolean) => Promise<{ success: boolean; message: string }>;
+  onClearAuditLogs?: () => Promise<void> | void;
+  onDeleteAuditLog?: (id: number | string) => Promise<void> | void;
 }
 
 export function SettingsView({
@@ -63,11 +65,14 @@ export function SettingsView({
   dataCounts,
   onResetData,
   onRestoreBackup,
+  onClearAuditLogs,
+  onDeleteAuditLog,
 }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<'general' | 'backup' | 'audit' | 'reset'>('backup');
   const [form, setForm] = useState<CompanySettings>({ ...settings });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [filterAction, setFilterAction] = useState<string>('all');
+  const [auditSuccessMsg, setAuditSuccessMsg] = useState('');
   const [downloading, setDownloading] = useState(false);
 
   // Backup Schedule & Storage Configuration State
@@ -599,6 +604,22 @@ export function SettingsView({
       alert(`حدث خطأ أثناء التصفير الشامل: ${err?.message || err}`);
     } finally {
       setIsFullResetting(false);
+    }
+  };
+
+  const handleClearAuditTrailClick = async () => {
+    if (!onClearAuditLogs) return;
+    if (window.confirm('هل أنت متأكد من حذف ومسح سجل العمليات والتدقيق (Audit Trail) بالكامل؟ لا يمكن التراجع عن هذا الإجراء.')) {
+      await onClearAuditLogs();
+      setAuditSuccessMsg('تم حذف سجل العمليات والتدقيق بالكامل بنجاح');
+      setTimeout(() => setAuditSuccessMsg(''), 4000);
+    }
+  };
+
+  const handleDeleteSingleLogClick = async (id: number | string) => {
+    if (!onDeleteAuditLog) return;
+    if (window.confirm('هل أنت متأكد من حذف هذا السجل المحدد من سجل العمليات؟')) {
+      await onDeleteAuditLog(id);
     }
   };
 
@@ -1297,25 +1318,49 @@ export function SettingsView({
             <div className="flex items-center gap-2">
               <History className="w-5 h-5 text-purple-600" />
               <h3 className="font-bold text-slate-900 text-sm">سجل العمليات والتدقيق (Audit Trail)</h3>
+              <span className="text-[11px] font-mono bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200 font-bold">
+                {auditLogs.length} سجل
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <select
-                value={filterAction}
-                onChange={(e) => setFilterAction(e.target.value)}
-                className="p-1.5 border border-slate-300 rounded-lg text-xs bg-slate-50"
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Filter className="w-4 h-4 text-slate-400" />
+                <select
+                  value={filterAction}
+                  onChange={(e) => setFilterAction(e.target.value)}
+                  className="p-1.5 border border-slate-300 rounded-lg text-xs bg-slate-50"
+                >
+                  <option value="all">كافة العمليات</option>
+                  <option value="LOGIN">تسجيل دخول</option>
+                  <option value="PAYROLL_SAVE">حفظ مسير رواتب</option>
+                  <option value="DATABASE_RESTORE">استعادة قاعدة بيانات</option>
+                  <option value="BACKUP_CREATE">إنشاء نسخة احتياطية</option>
+                  <option value="SYSTEM_RESET">تصفير بيانات</option>
+                  <option value="SETTINGS_UPDATE">تحديث إعدادات</option>
+                </select>
+              </div>
+
+              {/* Delete / Clear Audit Trail Button */}
+              <button
+                type="button"
+                onClick={handleClearAuditTrailClick}
+                disabled={auditLogs.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 hover:text-red-800 border border-red-200 rounded-xl text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+                title="حذف ومسح سجل العمليات والتدقيق بالكامل"
               >
-                <option value="all">كافة العمليات</option>
-                <option value="LOGIN">تسجيل دخول</option>
-                <option value="PAYROLL_SAVE">حفظ مسير رواتب</option>
-                <option value="DATABASE_RESTORE">استعادة قاعدة بيانات</option>
-                <option value="BACKUP_CREATE">إنشاء نسخة احتياطية</option>
-                <option value="SYSTEM_RESET">تصفير بيانات</option>
-                <option value="SETTINGS_UPDATE">تحديث إعدادات</option>
-              </select>
+                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                <span>حذف سجل العمليات (Audit Trail)</span>
+              </button>
             </div>
           </div>
+
+          {auditSuccessMsg && (
+            <div className="bg-emerald-50 border border-emerald-300 p-3 rounded-xl text-emerald-900 text-xs flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-bold">{auditSuccessMsg}</span>
+            </div>
+          )}
 
           <div className="overflow-x-auto max-h-[500px]">
             <table className="w-full text-right text-xs">
@@ -1326,12 +1371,13 @@ export function SettingsView({
                   <th className="py-2.5 px-3">النوع</th>
                   <th className="py-2.5 px-3">الجدول</th>
                   <th className="py-2.5 px-3">التفاصيل</th>
+                  <th className="py-2.5 px-3 text-center w-14">إجراء</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
                       لا توجد سجلات مطابقة للفلتر المحدد
                     </td>
                   </tr>
@@ -1347,6 +1393,16 @@ export function SettingsView({
                       </td>
                       <td className="py-2.5 px-3 font-mono text-slate-500">{log.tableName}</td>
                       <td className="py-2.5 px-3 text-slate-600">{log.details}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSingleLogClick(log.id)}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="حذف هذا السجل"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}

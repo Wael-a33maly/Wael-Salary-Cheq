@@ -17,6 +17,7 @@ export interface Department {
 export interface Employee {
   id: number;
   civilId: string;
+  jobNumber?: string; // الرقم الوظيفي / كود الموظف
   fullName: string;
   branchId: number;
   departmentId: number;
@@ -38,6 +39,7 @@ export interface Employee {
 export interface PayrollRow {
   employeeId: number;
   civilId: string;
+  jobNumber?: string; // الرقم الوظيفي
   employeeName: string;
   branchName: string;
   departmentName: string;
@@ -68,6 +70,7 @@ export interface UserAccount {
   username: string;
   fullName: string;
   email: string;
+  password?: string; // كلمة المرور
   role: 'admin' | 'accountant' | 'viewer';
   status: 'active' | 'inactive';
   branchId: number | null;
@@ -255,6 +258,7 @@ export interface Beneficiary {
   id: string; // e.g. "ben-1"
   nameAr: string; // الاسم بالعربية (كما سيطبع على الشيك)
   nameEn?: string; // Beneficiary English Name
+  preferredPrintLang?: 'ar' | 'en'; // لغة طباعة الشيكات المفضلة للمستفيد (عربي أو إنجليزي)
   bankAccountId?: string | 'all'; // مرتبط بحساب بنكي معين أو عام لكافة الحسابات
   category: 'company' | 'vendor' | 'employee' | 'government' | 'individual' | string;
   civilIdOrCR?: string; // الرقم المدني أو السجل التجاري

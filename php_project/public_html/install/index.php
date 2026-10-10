@@ -15,6 +15,15 @@ $configDir = dirname(__DIR__) . '/config';
 $configFile = $configDir . '/db.php';
 $schemaFile = __DIR__ . '/schema.sql';
 
+// التحقق من طلب إعادة التنصيب وفك القفل
+if (isset($_GET['reinstall']) && $_GET['reinstall'] === '1') {
+    if (file_exists($lockFile)) {
+        @unlink($lockFile);
+    }
+    header('Location: index.php');
+    exit;
+}
+
 // التحقق من قفل التنصيب مسبقاً
 $isLocked = file_exists($lockFile);
 
@@ -136,22 +145,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isLocked && $allRequirementsPasse
                 ':res_val'      => $residenceAlertDays,
             ]);
 
+            // التأكد من وجود أعمدة email و status في جدول users
+            try { $pdo->exec("ALTER TABLE users ADD COLUMN `email` VARCHAR(100) DEFAULT NULL"); } catch (Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE users ADD COLUMN `status` VARCHAR(20) NOT NULL DEFAULT 'active'"); } catch (Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE users ADD COLUMN `branch_id` INT UNSIGNED DEFAULT NULL"); } catch (Throwable $e) {}
+
             // تشفير كلمة مرور الأدمن عبر bcrypt
             $passwordHash = password_hash($adminPass, PASSWORD_BCRYPT, ['cost' => 12]);
+            $adminEmail = trim($_POST['admin_email'] ?? 'admin@company.com.kw');
+            if (empty($adminEmail)) $adminEmail = 'admin@company.com.kw';
 
-            // إدخال حساب Super Admin
+            // إدخال وتحديث حساب المدير العام
             $stmtAdmin = $pdo->prepare("
-                INSERT INTO users (username, password, full_name, role)
-                VALUES (:username, :password, :full_name, 'super_admin')
+                INSERT INTO users (username, password, full_name, email, role, status)
+                VALUES (:username, :password, :full_name, :email, 'admin', 'active')
                 ON DUPLICATE KEY UPDATE 
                     password = VALUES(password),
                     full_name = VALUES(full_name),
-                    role = 'super_admin'
+                    email = VALUES(email),
+                    role = 'admin',
+                    status = 'active'
             ");
             $stmtAdmin->execute([
                 ':username' => $adminUser,
                 ':password' => $passwordHash,
                 ':full_name' => $adminName,
+                ':email' => $adminEmail,
             ]);
 
             $adminId = $pdo->lastInsertId() ?: 1;
@@ -312,8 +331,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isLocked && $allRequirementsPasse
                 </div>
             </div>
             <div class="text-center py-3">
-                <p class="text-muted">تم الانتهاء من إعداد قاعدة البيانات بنجاح! يمكنك الدخول مباشرة للنظام:</p>
-                <a href="../index.html" class="btn btn-primary btn-lg px-4 fw-bold">الانتقال إلى النظام (الواجهة الرئيسية) &larr;</a>
+                <p class="text-muted mb-3">تم الانتهاء من إعداد قاعدة البيانات بنجاح! يمكنك الدخول مباشرة للنظام أو إعادة التنصيب:</p>
+                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                    <a href="../index.html" class="btn btn-primary btn-lg px-4 fw-bold">الانتقال إلى النظام (الواجهة الرئيسية) &larr;</a>
+                    <a href="index.php?reinstall=1" class="btn btn-outline-warning btn-lg px-4 fw-bold" onclick="return confirm('هل أنت متأكد من رغبتك في إعادة تشغيل معالج التنصيب وإعادة تهيئة قاعدة البيانات؟');">🔄 إعادة التنصيب من جديد</a>
+                </div>
             </div>
         <?php else: ?>
 
@@ -387,7 +409,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isLocked && $allRequirementsPasse
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">كلمة المرور المشفرة</label>
-                            <input type="password" name="admin_pass" class="form-control" placeholder="6 خانات على الأقل" required>
+                            <input type="password" name="admin_pass" class="form-control" placeholder="6 خانات أو أكثر" required>
                         </div>
                     </div>
                 </div>

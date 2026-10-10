@@ -79,10 +79,19 @@ const buffer = await zip.generateAsync({
 const outPath1 = path.join(rootDir, 'public', 'payroll_system_kwd_production.zip');
 const outPath2 = path.join(rootDir, 'public', 'payroll_hostinger_production.zip');
 const outPath3 = path.join(rootDir, 'php_project', 'payroll_hostinger_production.zip');
+const outPath4 = path.join(rootDir, 'dist', 'payroll_system_kwd_production.zip');
+const outPath5 = path.join(rootDir, 'dist', 'payroll_hostinger_production.zip');
 
 fs.writeFileSync(outPath1, buffer);
 fs.writeFileSync(outPath2, buffer);
 fs.writeFileSync(outPath3, buffer);
+if (fs.existsSync(path.join(rootDir, 'dist'))) {
+  fs.writeFileSync(outPath4, buffer);
+  fs.writeFileSync(outPath5, buffer);
+}
+
+// Sync back to php_project/public_html
+copyRecursive(pkgDir, path.join(rootDir, 'php_project', 'public_html'));
 
 console.log(`Success! Updated ZIP files generated:`);
 console.log(`  - ${outPath1} (${(buffer.length / 1024 / 1024).toFixed(2)} MB)`);

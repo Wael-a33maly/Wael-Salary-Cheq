@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
   Download, 
@@ -8,13 +8,19 @@ import {
   Calendar, 
   AlertTriangle, 
   Archive, 
-  ArrowLeft,
-  ArrowRight,
-  RotateCcw,
-  Eye,
-  Building,
-  DollarSign,
-  Users
+  ArrowLeft, 
+  ArrowRight, 
+  RotateCcw, 
+  Eye, 
+  Building, 
+  DollarSign, 
+  Users,
+  Copy,
+  Check,
+  CheckCircle2,
+  FileSpreadsheet,
+  Sparkles,
+  Layers
 } from 'lucide-react';
 import { Employee, Branch, Department, CompanySettings, MonthlyPayroll } from '../types';
 import { roundCashDown, getResidenceStatus } from '../mockData';
@@ -43,10 +49,20 @@ export function ReportsView({
   branches,
   departments,
   settings,
-  activeReportId = 1,
+  activeReportId: propActiveReportId = 1,
   savedPayrolls = [],
   onViewPayroll,
 }: ReportsViewProps) {
+  const [internalReportId, setInternalReportId] = useState<number>(propActiveReportId);
+
+  useEffect(() => {
+    if (propActiveReportId) {
+      setInternalReportId(propActiveReportId);
+    }
+  }, [propActiveReportId]);
+
+  const activeReportId = internalReportId;
+
   const [selectedBranchId, setSelectedBranchId] = useState<number>(1);
   const [selectedResFilter, setSelectedResFilter] = useState<string>('all');
 
@@ -55,7 +71,14 @@ export function ReportsView({
   const [selectedBankName, setSelectedBankName] = useState<string>('all');
   const [selectedPayrollMonth, setSelectedPayrollMonth] = useState<string>('current');
 
-  // Reports Definitions (Attendance/Absence report 7 was removed as requested)
+  // Report 8 States (كشف استحقاق الرواتب المخصص: الصافي، الرقم الوظيفي، البيان)
+  const [rep8Month, setRep8Month] = useState<string>('current');
+  const [rep8BranchId, setRep8BranchId] = useState<string>('all');
+  const [rep8CustomStatement, setRep8CustomStatement] = useState<string>('');
+  const [rep8CopiedCol, setRep8CopiedCol] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  // Reports Definitions
   const reportsList = [
     { id: 1, title: 'التقرير المالي المجمع لكافة فروع الشركة', desc: 'إجمالي الرواتب والاستقطاعات والإضافي والتقريب لكل فرع مع المجموع العام' },
     { id: 2, title: 'كشف رواتب فرع محدد وتفاصيل موظفيه', desc: 'مسير تفصيلي بالموظفين لفرع معين مع مجموع الفرع في التذييل' },
@@ -64,6 +87,7 @@ export function ReportsView({
     { id: 5, title: 'كشف استقطاعات السلف الشهرية', desc: 'حصر المبالغ المستردة من رواتب الموظفين لصالح سداد السلف' },
     { id: 6, title: 'تقرير متابعة انتهاء الإقامات بالألوان الخمسة', desc: 'نظام الإنذار المبكر للإقامات المنتهية وتلك التي تنتهي خلال 30، 60، و90 يوماً' },
     { id: 7, title: 'الأرشيف المالي للشهور والسنوات السابقة', desc: 'سجل المسيرات المعتمدة السابقة مع زر استعراض المسير التفصيلي' },
+    { id: 8, title: 'كشف استحقاق الرواتب المخصص (المبلغ الصافي • الرقم الوظيفي • البيان)', desc: 'كشف رواتب تفصيلي بثلاثة أعمدة رئيسية للتحويلات مع إمكانية نسخ كل عمود مستقلاً وتعديل بيان الاستحقاق حسب الشهر' },
   ];
 
   // Helper calculation for an employee in current active calculation
@@ -233,9 +257,120 @@ export function ReportsView({
         return [e.fullName, e.civilId, branch?.name || '', e.residenceExpiryDate, st.daysRemaining, st.label];
       });
       exportCsv('residency_expiration_report_kwd', headers, rows);
+    } else if (activeReportId === 8) {
+      handleExportRep8();
     } else {
       alert('تم تجهيز التقرير للتصدير بنجاح.');
     }
+  };
+
+  // =========================================================
+  // Report 8 Calculations & Handlers
+  // =========================================================
+  const rep8SelectedPayroll = useMemo(() => {
+    if (rep8Month === 'current') return null;
+    return savedPayrolls.find((p) => p.id === rep8Month) || null;
+  }, [rep8Month, savedPayrolls]);
+
+  const rep8MonthLabel = useMemo(() => {
+    if (rep8SelectedPayroll) {
+      return rep8SelectedPayroll.monthName;
+    }
+    return 'أكتوبر 2026';
+  }, [rep8SelectedPayroll]);
+
+  const defaultRep8Statement = useMemo(() => {
+    return `استحقاق راتب شهر ${rep8MonthLabel}`;
+  }, [rep8MonthLabel]);
+
+  const activeRep8Statement = rep8CustomStatement.trim() || defaultRep8Statement;
+
+  const rep8Rows = useMemo(() => {
+    if (rep8SelectedPayroll) {
+      const p = rep8SelectedPayroll;
+      const daysInMonth = p.daysInMonth || 30;
+      return employees
+        .filter((e) => p.employeeIds.includes(e.id))
+        .filter((e) => rep8BranchId === 'all' || e.branchId.toString() === rep8BranchId)
+        .map((emp) => {
+          const inp = p.inputs?.[emp.id] || { absentDays: 0, absentHours: 0, overtimeHours: 0, advanceDeduction: 0 };
+          const dailyRate = emp.basicSalary / daysInMonth;
+          const hourlyRate = dailyRate / emp.dailyHours;
+          const absentDed = (inp.absentDays * dailyRate) + (inp.absentHours * hourlyRate);
+          const overtimeAmount = inp.overtimeHours * (hourlyRate * (settings.overtimeRate || 1.25));
+          const rawNet = Math.max(0, emp.basicSalary - absentDed + overtimeAmount - inp.advanceDeduction);
+          const bankAmount = Math.min(rawNet, emp.bankTransferAmount);
+          const rawCash = Math.max(0, rawNet - bankAmount);
+          const finalCash = roundCashDown(rawCash, settings.roundingStep || 0.050);
+          const netSalary = bankAmount + finalCash;
+
+          return {
+            emp,
+            netSalary,
+            jobNumber: emp.jobNumber || `EMP-${emp.civilId ? emp.civilId.slice(-4) : emp.id}`,
+            statement: activeRep8Statement,
+          };
+        });
+    }
+
+    return calculatedAll
+      .filter((c) => rep8BranchId === 'all' || c.emp.branchId.toString() === rep8BranchId)
+      .map((c) => ({
+        emp: c.emp,
+        netSalary: c.net,
+        jobNumber: c.emp.jobNumber || `EMP-${c.emp.civilId ? c.emp.civilId.slice(-4) : c.emp.id}`,
+        statement: activeRep8Statement,
+      }));
+  }, [rep8SelectedPayroll, rep8BranchId, employees, calculatedAll, activeRep8Statement, settings.overtimeRate, settings.roundingStep]);
+
+  const handleCopyCol = (colKey: 'amount' | 'jobNumber' | 'statement' | 'all') => {
+    let text = '';
+    let msg = '';
+    if (colKey === 'amount') {
+      text = rep8Rows.map((r) => r.netSalary.toFixed(3)).join('\n');
+      msg = `تم نسخ عمود المبلغ الصافي (${rep8Rows.length} قيمة) إلى الحافظة بنجاح! جاهز للصق في Excel أو التحويل البنكي.`;
+    } else if (colKey === 'jobNumber') {
+      text = rep8Rows.map((r) => r.jobNumber).join('\n');
+      msg = `تم نسخ عمود الرقم الوظيفي (${rep8Rows.length} كود) إلى الحافظة بنجاح!`;
+    } else if (colKey === 'statement') {
+      text = rep8Rows.map((r) => r.statement).join('\n');
+      msg = `تم نسخ عمود البيان (${rep8Rows.length} سطر) إلى الحافظة بنجاح!`;
+    } else if (colKey === 'all') {
+      text = [
+        'المبلغ الصافي\tالرقم الوظيفي\tبيان',
+        ...rep8Rows.map((r) => `${r.netSalary.toFixed(3)}\t${r.jobNumber}\t${r.statement}`)
+      ].join('\n');
+      msg = `تم نسخ كامل التقرير كجدول Excel (${rep8Rows.length} صف) إلى الحافظة بنجاح!`;
+    }
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+    } catch {
+      // fallback
+    }
+
+    setRep8CopiedCol(colKey);
+    setCopyFeedback(msg);
+    setTimeout(() => {
+      setRep8CopiedCol(null);
+      setCopyFeedback(null);
+    }, 3500);
+  };
+
+  const handleExportRep8 = () => {
+    const headers = ['المبلغ الصافي', 'الرقم الوظيفي', 'بيان'];
+    const rows = rep8Rows.map((r) => [r.netSalary.toFixed(3), r.jobNumber, r.statement]);
+    const monthPart = rep8SelectedPayroll ? rep8SelectedPayroll.monthName.replace(/\s+/g, '_') : 'current_month';
+    exportCsv(`payroll_report_net_job_statement_${monthPart}`, headers, rows);
   };
 
   // Archived payrolls list from actual saved monthly payrolls (empty if reset)
@@ -251,14 +386,14 @@ export function ReportsView({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-black text-slate-900">
-              مركز التقارير المالية والإدارية (7 تقارير)
+              مركز التقارير المالية والإدارية (8 تقارير)
             </h2>
             <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
               تقارير معتمدة &bull; Excel + Print
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            كشوف الرواتب، التحويلات البنكية، سحب النقد من الخزينة، وفورات التقريب، واستحقاقات الإقامات
+            كشوف الرواتب، التحويلات البنكية، سحب النقد من الخزينة، وفورات التقريب، استحقاقات الإقامات، وكشف الاستحقاق المخصص
           </p>
         </div>
 
@@ -279,6 +414,28 @@ export function ReportsView({
             <span>تصدير Excel (CSV UTF-8)</span>
           </button>
         </div>
+      </div>
+
+      {/* Quick Report Selector Tabs (Pills) */}
+      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-1.5 overflow-x-auto print:hidden">
+        {reportsList.map((r) => {
+          const isActive = activeReportId === r.id;
+          return (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => setInternalReportId(r.id)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              {r.id === 8 && <Sparkles className={`w-3.5 h-3.5 ${isActive ? 'text-amber-300' : 'text-blue-600'}`} />}
+              <span>{r.id}. {r.id === 8 ? 'كشف الاستحقاق (صافي/وظيفي/بيان)' : r.id === 7 ? 'الأرشيف المالي' : r.id === 6 ? 'انتهاء الإقامات' : r.id === 5 ? 'السلف' : r.id === 4 ? 'التقريب' : r.id === 3 ? 'التحويلات البنكية' : r.id === 2 ? 'رواتب فرع محدد' : 'المجمع المالي'}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ========================================================= */}
@@ -949,6 +1106,310 @@ export function ReportsView({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* Report 8: Custom Payroll Entitlement Report (Net Salary • Job Number • Statement) */}
+      {/* ========================================================= */}
+      {activeReportId === 8 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5 animate-in fade-in">
+          
+          {/* Header & Description */}
+          <div className="border-b border-slate-200 pb-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black text-slate-900">
+                  8. كشف استحقاق الرواتب المخصص (المبلغ الصافي • الرقم الوظيفي • البيان)
+                </h3>
+                <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-blue-600" />
+                  <span>نسخ مستقل للأعمدة</span>
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                كشف رواتب تفصيلي بثلاثة أعمدة رئيسية للتحويلات (المبلغ الصافي، الرقم الوظيفي، والبيان المخصص حسب الشهر) مع إمكانية نسخ كل عمود مستقلاً لتسهيل اللصق المباشر في قوالب البنوك والإكسيل
+              </p>
+            </div>
+
+            {/* Quick Count & Net Total Badge */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-mono font-bold bg-slate-100 px-3 py-1.5 rounded-xl text-slate-700 border border-slate-200">
+                {rep8Rows.length} موظفاً
+              </span>
+              <span className="text-xs font-mono font-bold bg-emerald-100 text-emerald-900 px-3 py-1.5 rounded-xl border border-emerald-200">
+                إجمالي الصافي: {rep8Rows.reduce((s, r) => s + r.netSalary, 0).toFixed(3)} د.ك
+              </span>
+            </div>
+          </div>
+
+          {/* Interactive Filters Bar */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              
+              {/* 1. Month Picker */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">الشهر المالي المطلوب:</label>
+                <select
+                  value={rep8Month}
+                  onChange={(e) => {
+                    setRep8Month(e.target.value);
+                    setRep8CustomStatement(''); // Reset custom text so it adopts the new month
+                  }}
+                  className="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold text-slate-800"
+                >
+                  <option value="current">المسير الفعلي النشط (أكتوبر 2026)</option>
+                  {savedPayrolls.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.monthName} ({p.status === 'approved' ? 'معتمد' : 'مسودة'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Branch Filter */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">الفرع (اختياري):</label>
+                <select
+                  value={rep8BranchId}
+                  onChange={(e) => setRep8BranchId(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="all">كافة الفروع ({branches.length})</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id.toString()}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Dynamic Statement Field (Editable with instant preview) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-700 font-bold">صيغة البيان (تتغير حسب الشهر):</label>
+                  {rep8CustomStatement && (
+                    <button
+                      type="button"
+                      onClick={() => setRep8CustomStatement('')}
+                      className="text-[10px] text-blue-600 hover:underline font-bold"
+                    >
+                      استعادة الافتراضي
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={activeRep8Statement}
+                  onChange={(e) => setRep8CustomStatement(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                  placeholder="مثال: استحقاق راتب شهر سبتمبر 2026"
+                />
+              </div>
+
+            </div>
+          </div>
+
+          {/* Copy Notification Toast */}
+          {copyFeedback && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center justify-between shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-bold">{copyFeedback}</span>
+              </div>
+              <span className="text-[10px] bg-emerald-200 text-emerald-900 font-mono px-2 py-0.5 rounded font-bold">
+                Ctrl + V للصق المباشر
+              </span>
+            </div>
+          )}
+
+          {/* Column Copying Control Strip ("أزرار النسخ المستقل لكل عمود") */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50/50 p-4 rounded-xl border border-blue-200/70 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                <Copy className="w-4 h-4 text-blue-700" />
+                <span>أدوات النسخ المباشر للأعمدة:</span>
+              </span>
+              <span className="text-[11px] text-blue-700 font-normal hidden sm:inline">
+                (انسخ أي عمود كقائمة رأسية منفصلة للصقه مباشرة في مكانه المخصص)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Copy Net Amount Column */}
+              <button
+                type="button"
+                onClick={() => handleCopyCol('amount')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 ${
+                  rep8CopiedCol === 'amount'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white hover:bg-blue-50 text-blue-900 border border-blue-300'
+                }`}
+                title="نسخ عمود المبالغ الصافية فقط سطراً بسطر"
+              >
+                {rep8CopiedCol === 'amount' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-blue-600" />}
+                <span>{rep8CopiedCol === 'amount' ? 'تم نسخ المبالغ ✓' : 'نسخ عمود [المبلغ الصافي]'}</span>
+              </button>
+
+              {/* Copy Job Number Column */}
+              <button
+                type="button"
+                onClick={() => handleCopyCol('jobNumber')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 ${
+                  rep8CopiedCol === 'jobNumber'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white hover:bg-blue-50 text-blue-900 border border-blue-300'
+                }`}
+                title="نسخ عمود الأرقام الوظيفية فقط سطراً بسطر"
+              >
+                {rep8CopiedCol === 'jobNumber' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-blue-600" />}
+                <span>{rep8CopiedCol === 'jobNumber' ? 'تم نسخ الأرقام الوظيفية ✓' : 'نسخ عمود [الرقم الوظيفي]'}</span>
+              </button>
+
+              {/* Copy Statement Column */}
+              <button
+                type="button"
+                onClick={() => handleCopyCol('statement')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 ${
+                  rep8CopiedCol === 'statement'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white hover:bg-blue-50 text-blue-900 border border-blue-300'
+                }`}
+                title="نسخ عمود البيان فقط سطراً بسطر"
+              >
+                {rep8CopiedCol === 'statement' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-blue-600" />}
+                <span>{rep8CopiedCol === 'statement' ? 'تم نسخ البيان ✓' : 'نسخ عمود [البيان]'}</span>
+              </button>
+
+              {/* Copy Full Table TSV */}
+              <button
+                type="button"
+                onClick={() => handleCopyCol('all')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 ${
+                  rep8CopiedCol === 'all'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-800 hover:bg-slate-700 text-white'
+                }`}
+                title="نسخ كامل التقرير كجدول Tab-separated للصق المباشر في Excel"
+              >
+                {rep8CopiedCol === 'all' ? <Check className="w-3.5 h-3.5" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                <span>{rep8CopiedCol === 'all' ? 'تم نسخ كامل الجدول ✓' : 'نسخ الجدول كاملاً للإكسيل'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table with 3 Main Columns + Header Copy Buttons */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100 font-bold text-slate-700 border-b border-slate-200">
+                  <tr>
+                    <th className="p-3 w-12 text-center">#</th>
+                    
+                    {/* Column 1: المبلغ الصافي */}
+                    <th className="p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>المبلغ الصافي (د.ك)</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCol('amount')}
+                          className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded font-normal text-[10px] flex items-center gap-1 transition"
+                          title="نسخ هذا العمود بالكامل"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>نسخ العمود</span>
+                        </button>
+                      </div>
+                    </th>
+
+                    {/* Column 2: الرقم الوظيفي */}
+                    <th className="p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>الرقم الوظيفي</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCol('jobNumber')}
+                          className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded font-normal text-[10px] flex items-center gap-1 transition"
+                          title="نسخ هذا العمود بالكامل"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>نسخ العمود</span>
+                        </button>
+                      </div>
+                    </th>
+
+                    {/* Column 3: بيان */}
+                    <th className="p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>بيان</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCol('statement')}
+                          className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded font-normal text-[10px] flex items-center gap-1 transition"
+                          title="نسخ هذا العمود بالكامل"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>نسخ العمود</span>
+                        </button>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {rep8Rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-10 text-center text-slate-400 bg-slate-50/50">
+                        لا توجد بيانات موظفين مطابقة للشهر أو الفرع المحدد.
+                      </td>
+                    </tr>
+                  ) : (
+                    rep8Rows.map((r, idx) => (
+                      <tr key={r.emp.id || idx} className="hover:bg-blue-50/30 transition">
+                        <td className="p-3 text-center font-mono text-slate-400">
+                          {idx + 1}
+                        </td>
+                        <td className="p-3 font-mono font-black text-blue-900 text-sm">
+                          {r.netSalary.toFixed(3)}
+                        </td>
+                        <td className="p-3 font-mono font-bold text-slate-900">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-200 font-mono">
+                              {r.jobNumber}
+                            </span>
+                            <span className="text-slate-400 font-sans text-[11px] font-normal">
+                              ({r.emp.fullName})
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-800 font-medium font-sans">
+                          {r.statement}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+
+                {rep8Rows.length > 0 && (
+                  <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
+                    <tr>
+                      <td className="p-3 text-center text-slate-500 font-mono">المجموع</td>
+                      <td className="p-3 font-mono font-black text-blue-950 text-sm">
+                        {rep8Rows.reduce((s, r) => s + r.netSalary, 0).toFixed(3)} د.ك
+                      </td>
+                      <td className="p-3 font-bold text-slate-700">
+                        إجمالي {rep8Rows.length} موظفاً
+                      </td>
+                      <td className="p-3 text-slate-500 font-normal">
+                        صيغة البيان موحدة لكافة السطور وفق الشهر المطلوب
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+
         </div>
       )}
 

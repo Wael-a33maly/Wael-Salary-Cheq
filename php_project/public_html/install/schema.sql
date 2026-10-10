@@ -18,7 +18,10 @@ CREATE TABLE IF NOT EXISTS `users` (
   `username` VARCHAR(50) NOT NULL UNIQUE COMMENT 'اسم المستخدم لتسجيل الدخول',
   `password` VARCHAR(255) NOT NULL COMMENT 'كلمة المرور المشفرة بواسطة bcrypt',
   `full_name` VARCHAR(100) NOT NULL COMMENT 'الاسم الكامل للمستخدم',
-  `role` VARCHAR(20) NOT NULL DEFAULT 'super_admin' COMMENT 'الدور: super_admin / manager',
+  `email` VARCHAR(100) DEFAULT NULL COMMENT 'البريد الإلكتروني',
+  `role` VARCHAR(20) NOT NULL DEFAULT 'super_admin' COMMENT 'الدور: super_admin / manager / admin / accountant',
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active' COMMENT 'حالة الحساب',
+  `branch_id` INT UNSIGNED DEFAULT NULL COMMENT 'معرف الفرع المرتبط إن وجد',
   `is_default_password` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 إذا كانت كلمة المرور هي الافتراضية للتنبيه بتغييرها',
   `last_login` DATETIME DEFAULT NULL COMMENT 'تاريخ ووقت آخر تسجيل دخول',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -70,6 +73,7 @@ CREATE TABLE IF NOT EXISTS `departments` (
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `employees` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `job_number` VARCHAR(50) DEFAULT NULL COMMENT 'الرقم الوظيفي / كود الموظف',
   `civil_id` VARCHAR(12) NOT NULL UNIQUE COMMENT 'الرقم المدني الكويتي - 12 رقماً فريداً',
   `name` VARCHAR(150) NOT NULL COMMENT 'اسم الموظف الكامل',
   `job_title` VARCHAR(100) NOT NULL COMMENT 'المسمى الوظيفي',
@@ -260,6 +264,7 @@ CREATE TABLE IF NOT EXISTS `beneficiaries` (
   `bank_name` VARCHAR(100) DEFAULT NULL,
   `iban` VARCHAR(50) DEFAULT NULL,
   `phone_number` VARCHAR(50) DEFAULT NULL,
+  `preferred_print_lang` ENUM('ar', 'en') NOT NULL DEFAULT 'ar' COMMENT 'لغة طباعة الشيكات الافتراضية للمستفيد (عربي أو إنجليزي)',
   `notes` TEXT DEFAULT NULL,
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -578,6 +583,11 @@ INSERT INTO `settings` (`id`, `company_name`, `overtime_multiplier`, `residency_
 VALUES 
 (1, 'شركة الأعمال للتجارة والمقاولات', 1.25, 60, 'د.ك', 0.050)
 ON DUPLICATE KEY UPDATE `updated_at`=NOW();
+
+INSERT INTO `users` (`id`, `username`, `password`, `full_name`, `email`, `role`, `status`)
+VALUES 
+(1, 'admin', 'Admin@2026!', 'المسؤول العام للنظام', 'admin@company.com.kw', 'admin', 'active')
+ON DUPLICATE KEY UPDATE `full_name`=VALUES(`full_name`);
 
 SET FOREIGN_KEY_CHECKS = 1;
 

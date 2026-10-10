@@ -16,7 +16,8 @@ import {
   Check,
   X,
   Palette,
-  Layers
+  Layers,
+  Languages
 } from 'lucide-react';
 import { Beneficiary, IssuedCheque, BankAccount, BeneficiaryCategory } from '../../types';
 import { INITIAL_BENEFICIARY_CATEGORIES } from '../../mockCheques';
@@ -102,6 +103,7 @@ export function BeneficiariesView({
   const [formData, setFormData] = useState({
     nameAr: '',
     nameEn: '',
+    preferredPrintLang: 'ar' as 'ar' | 'en',
     category: categories[0]?.id || 'vendor',
     bankAccountId: 'all',
     civilIdOrCR: '',
@@ -117,6 +119,7 @@ export function BeneficiariesView({
     setFormData({
       nameAr: '',
       nameEn: '',
+      preferredPrintLang: 'ar',
       category: categories[0]?.id || 'vendor',
       bankAccountId: selectedAccountId === 'all' ? 'all' : selectedAccountId,
       civilIdOrCR: '',
@@ -134,6 +137,7 @@ export function BeneficiariesView({
     setFormData({
       nameAr: b.nameAr,
       nameEn: b.nameEn || '',
+      preferredPrintLang: b.preferredPrintLang || 'ar',
       category: b.category,
       bankAccountId: b.bankAccountId || 'all',
       civilIdOrCR: b.civilIdOrCR || '',
@@ -155,6 +159,7 @@ export function BeneficiariesView({
         ...editingBeneficiary,
         nameAr: formData.nameAr.trim(),
         nameEn: formData.nameEn.trim() || undefined,
+        preferredPrintLang: formData.preferredPrintLang,
         category: formData.category,
         bankAccountId: formData.bankAccountId,
         civilIdOrCR: formData.civilIdOrCR.trim() || undefined,
@@ -168,6 +173,7 @@ export function BeneficiariesView({
       onAddBeneficiary({
         nameAr: formData.nameAr.trim(),
         nameEn: formData.nameEn.trim() || undefined,
+        preferredPrintLang: formData.preferredPrintLang,
         category: formData.category,
         bankAccountId: formData.bankAccountId,
         civilIdOrCR: formData.civilIdOrCR.trim() || undefined,
@@ -423,6 +429,21 @@ export function BeneficiariesView({
                   <h3 className="text-sm font-black text-slate-900 mt-2">{b.nameAr}</h3>
                   {b.nameEn && <p className="text-[11px] text-slate-400 font-sans">{b.nameEn}</p>}
 
+                  {/* Print Language Preference Badge */}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    {b.preferredPrintLang === 'en' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <Languages className="w-3 h-3 text-indigo-500" />
+                        <span>طباعة الشيكات: إنجليزية (English)</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <Languages className="w-3 h-3 text-emerald-500" />
+                        <span>طباعة الشيكات: عربية (يمين)</span>
+                      </span>
+                    )}
+                  </div>
+
                   {/* Metadata */}
                   <div className="mt-3 space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-2.5">
                     {b.civilIdOrCR && (
@@ -524,7 +545,9 @@ export function BeneficiariesView({
               </div>
 
               <div>
-                <label className="block text-slate-700 font-bold mb-1">الاسم بالإنجليزية (اختياري):</label>
+                <label className="block text-slate-700 font-bold mb-1">
+                  الاسم بالإنجليزية {formData.preferredPrintLang === 'en' ? <span className="text-rose-500 font-bold">* (مطلوب للطباعة الإنجليزية)</span> : '(اختياري)'}:
+                </label>
                 <input
                   type="text"
                   placeholder="e.g. Gulf Supplies & General Contracting Co."
@@ -532,6 +555,86 @@ export function BeneficiariesView({
                   onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                   className="w-full p-2.5 border border-slate-300 rounded-xl font-sans"
                 />
+              </div>
+
+              {/* اختيار لغة طباعة الشيكات الافتراضية للمستفيد */}
+              <div className="p-3.5 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-blue-50/90 border-2 border-blue-200/90 rounded-2xl space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <label className="block text-blue-950 font-black text-xs flex items-center gap-1.5">
+                    <Languages className="w-4 h-4 text-blue-700" />
+                    <span>لغة طباعة الشيكات الافتراضية لهذا المستفيد:</span>
+                  </label>
+                  <span className="text-[10px] text-blue-800 font-bold bg-white px-2 py-0.5 rounded-full border border-blue-200 shadow-2xs">
+                    الأولوية الأولى عند الإصدار
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  حدد اللغة المعتمدة لطباعة شيكات هذا المستفيد؛ عند اختيار المستفيد في إصدار شيك سيتم تلقائياً اعتماد الاسم والتفقيط والمحاذاة المحددة هنا كخيار أساسي أول:
+                </p>
+
+                <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+                  <label
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition select-none ${
+                      formData.preferredPrintLang === 'ar'
+                        ? 'bg-white border-blue-600 ring-2 ring-blue-500/20 shadow-sm'
+                        : 'bg-white/70 border-slate-200 hover:bg-white text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="preferredPrintLang"
+                      value="ar"
+                      checked={formData.preferredPrintLang === 'ar'}
+                      onChange={() => setFormData({ ...formData, preferredPrintLang: 'ar' })}
+                      className="mt-1 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>باللغة العربية</span>
+                        <span className="text-[9.5px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                          الافتراضي
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        يطبع الشيك تلقائياً بالاسم العربي + تفقيط عربي + محاذاة لليمين
+                      </p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition select-none ${
+                      formData.preferredPrintLang === 'en'
+                        ? 'bg-white border-indigo-600 ring-2 ring-indigo-500/20 shadow-sm'
+                        : 'bg-white/70 border-slate-200 hover:bg-white text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="preferredPrintLang"
+                      value="en"
+                      checked={formData.preferredPrintLang === 'en'}
+                      onChange={() => setFormData({ ...formData, preferredPrintLang: 'en' })}
+                      className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>English (إنجليزية)</span>
+                        <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                          إنجليزية
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        يطبع الشيك تلقائياً بالاسم الإنجليزي + تفقيط إنجليزي + محاذاة لليسار
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {formData.preferredPrintLang === 'en' && !formData.nameEn?.trim() && (
+                  <div className="text-[11px] text-amber-800 bg-amber-50/90 p-2 rounded-xl border border-amber-300 flex items-center gap-1.5 font-medium">
+                    <span>⚠️ ملاحظة: تم اختيار الطباعة بالإنجليزية، يرجى كتابة الاسم بالإنجليزية أعلاه ليظهر على الشيك المطبوع بدقة.</span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
